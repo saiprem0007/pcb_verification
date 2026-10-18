@@ -1,0 +1,53 @@
+{
+  "_synthetic": true,
+  "fiducials": [
+    {
+      "name": "FID1",
+      "design_mm": [
+        6.6,
+        6.6
+      ],
+      "ref_px": [
+        55,
+        55
+      ],
+      "_note": "SYNTHETIC \u2014 pixel coords from render_board(); mm = px * 0.12"
+    },
+    {
+      "name": "FID2",
+      "design_mm": [
+        101.4,
+        6.6
+      ],
+      "ref_px": [
+        845,
+        55
+      ],
+      "_note": "SYNTHETIC \u2014 pixel coords from render_board(); mm = px * 0.12"
+    },
+    {
+      "name": "FID3",
+      "design_mm": [
+        6.6,
+        70.2
+      ],
+      "ref_px": [
+        55,
+        585
+      ],
+      "_note": "SYNTHETIC \u2014 pixel coords from render_board(); mm = px * 0.12"
+    },
+    {
+      "name": "FID4",
+      "design_mm": [
+        101.4,
+        70.2
+      ],
+      "ref_px": [
+        845,
+        585
+      ],
+      "_note": "SYNTHETIC \u2014 pixel coords from render_board(); mm = px * 0.12"
+    }
+  ]
+}
