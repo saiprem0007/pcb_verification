@@ -1,0 +1,46 @@
+{
+  "_comment": "Severity and corrective-action policy table. Status: CONSERVATIVE DEFAULTS — reviewed=false. Review and set reviewed=true when calibrated to your specific product and process.",
+  "_reviewed": false,
+  "_version": 1,
+  "_format": "Each key is a DefectType value. 'severity' sets the base severity level. 'corrective_action' is a Python str.format() template; available variables: {component}, {observed}, {expected}. The '_default' entry is used when a defect type is not listed.",
+
+  "MISSING_COMPONENT": {
+    "severity": "CRITICAL",
+    "corrective_action": "Component {component} is absent. Fit the component per the assembly drawing. Do not advance to the next stage until re-inspection passes."
+  },
+
+  "WRONG_COMPONENT": {
+    "severity": "CRITICAL",
+    "corrective_action": "Wrong component at {component} (found: {observed}; required: {expected}). Remove the incorrect part, fit the correct component, and re-inspect. Do not advance to the next stage."
+  },
+
+  "SHIFTED_COMPONENT": {
+    "severity": "HIGH",
+    "corrective_action": "Component {component} is out of position ({observed}; tolerance {expected}). Reposition the component within tolerance and re-inspect before advancing."
+  },
+
+  "ROTATED_COMPONENT": {
+    "severity": "HIGH",
+    "corrective_action": "Component {component} is incorrectly oriented ({observed}; tolerance {expected}). Correct the orientation and re-inspect before advancing."
+  },
+
+  "SIZE_DEVIATION": {
+    "severity": "HIGH",
+    "corrective_action": "Component {component} shows a size deviation ({observed}; expected {expected}). Confirm the correct part is fitted and re-inspect."
+  },
+
+  "UNEXPECTED_COMPONENT": {
+    "severity": "HIGH",
+    "corrective_action": "Unexpected component found at or near {component} ({observed}). Remove the extra part and re-inspect."
+  },
+
+  "VISUAL_ANOMALY": {
+    "severity": "MEDIUM",
+    "corrective_action": "Visual anomaly at {component} ({observed}). Inspect manually against the reference image. If damage, contamination, or a wrong part is confirmed, escalate to rework."
+  },
+
+  "_default": {
+    "severity": "MEDIUM",
+    "corrective_action": "Defect detected at {component}: {observed}. Inspect manually against the reference image and document findings."
+  }
+}

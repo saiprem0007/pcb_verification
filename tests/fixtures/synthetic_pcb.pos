@@ -1,0 +1,21 @@
+# Phase 3 synthetic PCB placement fixture
+# SYNTHETIC — generated from make_synthetic_pcb.py COMPONENTS
+# mm_per_px=0.12 applied to pixel bboxes to get design mm coordinates
+# DO NOT use as evidence of real-design support.
+#
+Ref Val Package PosX PosY Rot Side
+FID1 fiducial FID_2mm 6.6 6.6 0 F
+FID2 fiducial FID_2mm 101.4 6.6 0 F
+FID3 fiducial FID_2mm 6.6 70.2 0 F
+FID4 fiducial FID_2mm 101.4 70.2 0 F
+IC1 IC SOIC-8 23.4 19.8 0 F
+IC2 IC SOIC-8 69.6 16.2 0 F
+R1 RESISTOR R_0603 17.4 37.56 0 F
+R2 RESISTOR R_0603 17.4 43.56 0 F
+R3 RESISTOR R_0603 17.4 49.56 0 F
+R17 RESISTOR R_0603 41.16 60.6 0 F
+C1 CAP C_0805 38.76 38.76 0 F
+C4 CAP C_0805 48.36 38.76 0 F
+C7 CAP C_0805 57.96 38.76 0 F
+LED1 LED LED_D5 86.4 38.4 0 F
+J1 CONNECTOR PinHeader_1x06 91.2 60.0 0 F
