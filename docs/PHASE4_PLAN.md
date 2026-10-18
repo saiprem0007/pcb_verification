@@ -1,375 +1,429 @@
 # Phase 4A — Deterministic Inspection Completeness: Analysis & Plan
 
-> **STATUS: PLAN ONLY — awaiting user approval. No code has been changed.**
-> Label key: **IMPLEMENTED-AND-TESTED** | **IMPLEMENTED-UNTESTED** | **PLANNED** | **UNVERIFIED** | **NOT SUPPORTED**
+> **STATUS: PLAN ONLY — awaiting your approval. No inspection logic, threshold,
+> schema or test has been changed.** Everything below was measured on 2026-10-18 on
+> scratch copies of `data/` outside the repo. The only things written inside the repo
+> were gitignored generated files (the `synthetic_v1` images, caches, `node_modules`,
+> `frontend/dist`) and this document.
+>
+> **Revision 2.** Supersedes the earlier draft of this file. Corrections to that draft
+> are listed in §7.
+>
+> Labels: **[SYNTHETIC]** = computer-generated image, smoke test only, never a
+> real-world benchmark · **SUPPORTED / PARTIAL / NOT SUPPORTED** · **UNVERIFIED** =
+> reasoned but not measured.
+>
+> Acceptance targets: your message left the line `[EDIT THIS LINE …]` unedited, so all
+> 7 targets in `docs/ACCEPTANCE.md` stay **PROPOSED**. Severity table, package table
+> (`"_reviewed": false`) and stage progression are unchanged / deferred, as instructed.
 
 ---
 
-## 0. Fix-up deliverables (separate from Phase 4)
+## 0. Fix-ups (separate from Phase 4)
 
-### Fix-up 1 — `frontend/src/types.ts` correction
+### Fix-up 1 — Vite and the Python schema
 
-**Correction:** The previous report incorrectly stated "Vite reads the Python schema."
-This is wrong. Vite/TypeScript do not read the Python schema at all.
+**Retraction:** the earlier claim that Vite "reads the Python schema" was wrong.
+Vite/TypeScript never read the Python Pydantic models. `frontend/src/types.ts` is
+hand-written and has to be kept in sync by hand.
 
-**What actually happened:** The `placement_transform` field was present in the Python
-`Reference` Pydantic model (serialised to JSON by FastAPI), but it was **missing**
-from `frontend/src/types.ts`. The TypeScript compiler did not error because TypeScript
-interface fields that are absent from an incoming JSON object are simply `undefined`
-at runtime, not a compile-time error when no explicit type check was made.
+**Check:** `Reference` in `frontend/src/types.ts` already has the field (line 171):
 
-**Fix applied (IMPLEMENTED-AND-TESTED):**
-
-Added to the `Reference` interface in `frontend/src/types.ts`:
-```typescript
-// Phase 3: affine transform matrix [[a,b,c],[d,e,f]] from design-mm to ref-px;
-//          null when no placement file has been imported
+```ts
 placement_transform?: number[][] | null;
 ```
 
-Frontend build after fix:
+so nothing needed adding. `npm run build` re-run this session (Node v22.22.0):
+
 ```
 > tsc -b && vite build
-✓ 45 modules transformed.  built in 1.08s   exit 0
+✓ 45 modules transformed.   ✓ built in 2.06s      exit 0, 0 TypeScript errors
 ```
-0 TypeScript errors.
 
----
+### Fix-up 2 — placement-region evaluation vs hand-made regions [SYNTHETIC]
 
-### Fix-up 2 — Placement-region eval vs. hand-made-region eval [SYNTHETIC]
+`synthetic_v1`, **N = 10** (3 GOOD, 5 DEFECTIVE, 2 REVIEW). Same engine, same images,
+same thresholds; only the region set differs. I reproduced both runs; they match the
+numbers in your earlier report exactly.
 
-> [SYNTHETIC — smoke test only, not a real-world benchmark]
-> N=10 (3 GOOD, 5 DEFECTIVE, 2 REVIEW).  Run 2026-10-17.
+| metric | hand-made regions | placement regions |
+|---|---|---|
+| accuracy | 1.000 (10/10) | 0.700 (7/10) |
+| precision (DEFECTIVE) | 1.000 | 0.625 |
+| recall (DEFECTIVE) | 1.000 | 1.000 |
+| false-positive rate | 0.000 | 0.600 (3 GOOD → DEFECTIVE) |
+| REVIEW rate | 0.200 | 0.200 |
+| **FALSE ACCEPTS** | **0** | **0** |
+| localization (REF_DES:TYPE found) | 7/7 | 2/7 |
+| MISSING / SHIFTED / ROTATED recall | 3/3 · 2/2 · 2/2 | 2/3 · 0/2 · 0/2 |
 
-| metric | Hand-made regions | Placement regions | delta |
-|---|---|---|---|
-| **N** | 10 | 10 | — |
-| **FALSE ACCEPTS** | **0** | **0** | = |
-| Accuracy | 1.000 (10/10) | 0.700 (7/10) | −0.300 |
-| Precision (DEFECTIVE) | 1.000 | 0.625 | −0.375 |
-| Recall (DEFECTIVE) | 1.000 | 1.000 | = |
-| False positive rate | 0.000 | 0.600 | +0.600 |
-| REVIEW rate | 0.200 | 0.200 | = |
-| Localization rate | 1.000 (7/7) | 0.286 (2/7) | −0.714 |
-| MISSING recall | 1.000 (3/3) | 0.667 (2/3) | −0.333 |
-| SHIFTED recall | 1.000 (2/2) | 0.000 (0/2) | −1.000 |
-| ROTATED recall | 1.000 (2/2) | 0.000 (0/2) | −1.000 |
+| image | expected | hand-made | placement | expected defect (REF_DES:TYPE) | found hand / placement |
+|---|---|---|---|---|---|
+| good_01 | GOOD | GOOD | **DEFECTIVE** | — | — |
+| good_02 | GOOD | GOOD | **DEFECTIVE** | — | — |
+| good_03 | GOOD | GOOD | **DEFECTIVE** | — | — |
+| defect_missing_R17 | DEFECTIVE | DEFECTIVE | DEFECTIVE | R17:MISSING_COMPONENT | 1/1 · 1/1 |
+| defect_missing_C4 | DEFECTIVE | DEFECTIVE | DEFECTIVE | C4:MISSING_COMPONENT | 1/1 · 1/1 |
+| defect_shifted_C4 | DEFECTIVE | DEFECTIVE | DEFECTIVE | C4:SHIFTED_COMPONENT | 1/1 · **0/1** |
+| defect_rotated_IC2 | DEFECTIVE | DEFECTIVE | DEFECTIVE | IC2:ROTATED_COMPONENT | 1/1 · **0/1** |
+| defect_multi | DEFECTIVE | DEFECTIVE | DEFECTIVE | C7:SHIFTED; IC1:ROTATED; R3:MISSING | 3/3 · **0/3** |
+| review_blurred | REVIEW | REVIEW | REVIEW | — | — |
+| review_off_fixture | REVIEW | REVIEW | REVIEW | — | — |
 
-**Per-image comparison (synthetic):**
+Primary metric holds (0 false accepts in both runs). In the placement run all 5
+defective images are DEFECTIVE, but in 3 of them (shifted, rotated, multi) the real
+defect is mis-typed as MISSING, and every image also carries spurious defects.
 
-| file | expected | hand-made result | placement result | note |
-|---|---|---|---|---|
-| good_01.png | GOOD | ✅ GOOD | ❌ DEFECTIVE (6 false defects) | FP caused by tiny bboxes |
-| good_02.png | GOOD | ✅ GOOD | ❌ DEFECTIVE (7 false defects) | FP |
-| good_03.png | GOOD | ✅ GOOD | ❌ DEFECTIVE (7 false defects) | FP |
-| defect_missing_R17.png | R17:MISSING | ✅ loc=1/1 | ✅ loc=1/1 | R17 center correct |
-| defect_missing_C4.png | C4:MISSING | ✅ loc=1/1 | ✅ loc=1/1 | C4 center correct |
-| defect_shifted_C4.png | C4:SHIFTED | ✅ loc=1/1 | ❌ loc=0/1 (C4 shown as MISSING) | bbox too small |
-| defect_rotated_IC2.png | IC2:ROTATED | ✅ loc=1/1 | ❌ loc=0/1 (IC2 shown as MISSING) | bbox too small |
-| defect_multi.png | 3 defects | ✅ loc=3/3 | ❌ loc=0/3 (all shown as MISSING) | bbox too small |
-| review_blurred.png | REVIEW | ✅ REVIEW | ✅ REVIEW | = |
-| review_off_fixture.png | REVIEW | ✅ REVIEW | ✅ REVIEW | = |
+### Fix-up 3 — placement bbox size vs hand-made bbox size [SYNTHETIC]
 
-**Key finding:** FALSE ACCEPTS=0 in both runs (primary metric satisfied). The placement
-regions cause 3 false positives on GOOD images and degrade localization, entirely because
-the placement bboxes are 7–15x smaller in area than the hand-made regions. See Fix-up 3.
+Measured from `meta.json` of the hand-made reference vs the regions `import_placement`
+generates from `tests/fixtures/synthetic_pcb.pos`:
 
----
-
-### Fix-up 3 — Bbox size ratios: placement vs. hand-made [SYNTHETIC]
-
-> Synthetic board: mm_per_px = 0.12, affine scale = 8.333 px/mm.
-> Hand-made bboxes include PCB pads and silkscreen markings.
-> Placement bboxes use standard EDA footprint body sizes (no pads).
-
-| Component | Hand-made W×H (px) | Placement W×H (px) | W ratio | H ratio | Area ratio |
+| comp | hand-made W×H px | placement W×H px | W ratio | H ratio | **area ratio** |
 |---|---|---|---|---|---|
 | IC1 | 150×110 | 44×34 | 0.29 | 0.31 | **0.091** |
 | IC2 | 120×90 | 44×34 | 0.37 | 0.38 | **0.139** |
-| R1 | 70×26 | 15×8 | 0.21 | 0.31 | **0.066** |
-| R2 | 70×26 | 15×8 | 0.21 | 0.31 | **0.066** |
-| R3 | 70×26 | 15×8 | 0.21 | 0.31 | **0.066** |
+| R1 / R2 / R3 | 70×26 | 15×8 | 0.21 | 0.31 | **0.066** |
 | R17 | 26×70 | 15×8 | 0.58 | 0.11 | **0.066** |
-| C1 | 46×46 | 20×12 | 0.43 | 0.26 | **0.113** |
-| C4 | 46×46 | 20×12 | 0.43 | 0.26 | **0.113** |
-| C7 | 46×46 | 20×12 | 0.43 | 0.26 | **0.113** |
-| LED1 | 40×40 | 42×42 | 1.05 | 1.05 | **1.103** (close — LED body = footprint body) |
-| J1 | 160×80 | 125×21 | 0.78 | 0.26 | **0.205** |
+| C1 / C4 / C7 | 46×46 | 20×12 | 0.43 | 0.26 | **0.113** |
+| LED1 | 40×40 | 42×42 | 1.05 | 1.05 | 1.103 |
+| J1 | 160×80 | 125×21 | 0.78 | 0.26 | 0.205 |
 
-**Detection impact:** The template search window is derived from the region bbox.
-A window at 10% of the correct area misses the component's pads and generates false
-"MISSING" signals (correlation drops below threshold). This is why SHIFTED and ROTATED
-defects become MISSING in the placement run — the template match fails on the tiny window.
+**Does it change detection? Yes.** The template and search window come from the region
+box. A box at 7–15 % of the real area contains only part of the component, so the
+template correlation falls under the missing threshold: good boards raise false
+MISSING/SHIFTED, and real SHIFTED/ROTATED defects are reported as MISSING.
 
-**Three candidate fixes (proposed — no code changed; your choice required):**
+**Proof that size is the whole cause** [SYNTHETIC experiment, scratch only, thresholds
+untouched]: I re-imported the same `.pos` using pad-inclusive sizes (the exact pixel
+extents, as a calibrated table would give). Result: accuracy **1.000 (10/10)**,
+false-positive rate 0.000, localization **7/7**, MISSING/SHIFTED/ROTATED recall all
+1.000, FALSE ACCEPTS 0 — identical to the hand-made run. So the engine is fine; the
+region boxes are not.
 
-| Option | What it does | Pros | Cons |
+Three related findings:
+
+1. The pad-inclusive entries already in `package_classes.json` (`_SYNTHETIC_PCB_DEMO`)
+   are **nested under one key, so lookups never reach them** (`IC_SYNTH_150x110` falls
+   to the generic 3×3 mm fallback).
+2. Real KiCad footprint names (`Resistor_SMD:R_0603_1608Metric`) match nothing in the
+   table and fall to the single-letter heuristic (resistor 2.0×1.0 mm).
+3. `components_to_regions` ignores the design rotation when it builds the box, so a
+   90° part gets a landscape box. The fixture marks R17 as rotation 0 although the
+   hand-made R17 is portrait, so this is not exercised by any test.
+
+**Proposed fix (no code changed; your choice needed — Decision D1):**
+
+| Option | What | Pro | Con |
 |---|---|---|---|
-| **A — Size columns in placement file** | KiCad can export W_mm/H_mm per footprint. Parser already accepts cols 7–8 optional. Plumb through to region bbox. | Exact per-footprint; no guessing | User must re-export; fixture needs update |
-| **B — Improved package_classes.json** | Increase sizes in `data/policy/package_classes.json` to pad-inclusive footprint sizes (already `_reviewed: false`) | Works now; no re-export needed | Sizes vary by manufacturer; approximation |
-| **C — Reference-photo refinement** | After importing placement centers, auto-expand each bbox by searching a ring around the center in the reference image | Adapts to actual photo | Adds a new pipeline step; more complex |
+| **A. Size columns in the file** | Parser already reads optional W/H columns (cols 8–9 of the `.pos` path); the CSV path currently sets `size_mm=None` and would need the same | exact per footprint | needs a file that has them (standard KiCad `.pos` has no size columns — UNVERIFIED for your version) |
+| **B. Size table calibrated to the reference image** | Un-nest/flatten the table, add a per-reference "visual footprint" scale (pads + silkscreen), and normalise KiCad `Library:Footprint_…` names to table keys | works with today's files; one-time calibration per product | approximation; needs a real-photo check |
+| **C. Refine against the reference photo** | After import, grow each box by searching a ring around the placed centre in the reference image | adapts to the actual part | new pipeline step, more to test |
 
-**Recommendation:** Option B as an immediate demo fix (revise the package table);
-Option A for production use (requires user to re-export with size columns). Option C deferred.
+Recommendation: **B for the demo and for any file without sizes, A when the file has
+them, C deferred.** Neither touches inspection thresholds.
 
-> **Decision 1 needed:** Which option(s) should Phase 4 implement?
+### Fix-up 4 — "report mm values from the transform when one exists"
 
----
+**Not implemented and not tested.**
 
-### Fix-up 4 — mm values from transform: implementation status
+- `pipeline.py` passes `profile.mm_per_px or cfg.mm_per_px` to the detector; the
+  transform is never read there. `defect_detector.py:66` is the only place mm is
+  computed (`dev_mm = offset_px * mm_per_px`) and only for SHIFTED.
+- `import_placement` does **not** set the reference's `mm_per_px`. A reference that is
+  created without a scalar and then gets a placement import therefore reports
+  `deviation_mm = None` even though a transform exists.
+- No test anywhere asserts `deviation_mm` (searched `tests/`).
 
-**Status: PARTIALLY IMPLEMENTED — `deviation_mm` populated via scalar `mm_per_px`, NOT via the affine transform.**
+**Proposed implementation (Phase 4B, if approved):**
 
-From `backend/app/inspection/defect_detector.py` line 66:
-```python
-dev_mm = round(m.offset_px * mm_per_px, 3) if mm_per_px > 0 else None
-```
+1. If `reference.placement_transform` exists, rebuild the `DesignTransform` and derive
+   mm from it. `scale_mm_to_px()` returns **pixels per mm**, so `mm_per_px =
+   1 / scale_mm_to_px()` (a naive reuse would be inverted). For an anisotropic fit,
+   convert the (dx, dy) offset per axis, then take the length.
+2. Cross-check against the scalar; if they disagree by > 5 % record a warning in the
+   result rather than silently choosing one.
+3. Tests: transform present → mm from transform; transform absent → scalar unchanged;
+   both present and disagreeing → warning; synthetic fixture (8.333 px/mm ⇔ 0.12
+   mm/px) round-trips.
+4. **UNVERIFIED risk:** the pipeline resizes the reference to ≤ 1280 px
+   (`image_max_dim`) but regions and the transform are in original reference pixels.
+   The synthetic reference is 900×640 so nothing breaks, but a larger real reference
+   would put regions/mm on the wrong scale. I will test this in 4B before any mm value
+   is trusted.
 
-This correctly converts `offset_px` to mm using the reference's scalar `mm_per_px`.
-However, the pipeline does NOT reconstruct the `DesignTransform` from
-`reference.placement_transform` to derive an accurate scale.
+### Fix-up 5 — what `make_synthetic_pcb.py --force` changes under `data/references/`
 
-**Gap:** When a placement file has been imported, the transform's `scale_mm_to_px()`
-would give a more accurate, potentially anisotropic scale. The scalar `mm_per_px`
-is still used instead.
+Measured by running it against a copy and hashing every file before/after:
 
-**Proposed fix (PLANNED — not yet implemented):**
-- In `pipeline.py`, if `reference.placement_transform is not None`, reconstruct a
-  `DesignTransform` and call `scale_mm_to_px()` to derive `mm_per_px` from the transform.
-- Pass the transform-derived scale to `detect_all()` as `mm_per_px`.
-- No schema changes. No threshold changes.
-- One new test: `test_deviation_mm_uses_transform_scale`.
-
-> **Decision 2 needed:** Implement this in Phase 4 alongside other changes, or as a
-> separate small fix before Phase 4?
-
----
-
-### Fix-up 5 — Files changed by `make_synthetic_pcb.py --force`
-
-| File path | Changed? | What changes |
+| path | changed? | what |
 |---|---|---|
-| `data/references/PCB_MODEL_001/meta.json` | **YES** | All fields rewritten: 11 hand-made regions, `active: true`, new `created_at`, `placement_transform: null` |
-| `data/references/PCB_MODEL_001/reference.png` | **YES** | Deterministically regenerated from COMPONENTS dict; identical pixels but file is rewritten |
-| `data/references/box/meta.json` | **NO** | Not touched |
-| `data/references/box/reference.png` | **NO** | Not touched |
-| `data/references/BOX_MODEL_001/meta.json` | **NO** | Not touched |
-| `data/references/BOX_MODEL_001/reference.png` | **NO** | Not touched |
+| `PCB_MODEL_001/meta.json` | **yes** | only `created_at` (`2026-10-17T04:36…` → now). `active` stays `true`; all 11 regions identical; `placement_transform` was `null` and stays `null` |
+| `PCB_MODEL_001/reference.png` | rewritten, **byte-identical** | deterministic render |
+| `BOX_MODEL_001/*`, `box/*` | no | `active` flags of the other references were already `false`, so activation did not touch them |
 
-The `active` flag is stored inside each reference's own `meta.json` (`"active": true/false`);
-there is no separate flag file. The `box` / `BOX_MODEL_001` references were completely
-unaffected. `data/datasets/synthetic_v1/` images and `manifest.json` were also regenerated
-(10 PNGs, outside `data/references/`). Nothing was deleted.
+Caveats: `--force` is delete-then-create on the `PCB_MODEL_001` folder, so **anything
+else you had added inside that folder, including an imported placement transform and
+imported regions, is lost** (the 11 hand-made regions come back). The `--force` run
+also regenerates `data/datasets/synthetic_v1/` (gitignored). Nothing was deleted by me.
 
 ---
 
-## 1. Defect gap analysis
+## 1. Defect gap analysis (measured)
 
-> Measured on `synthetic_v1` (hand-made regions) and `box_v1` (surface mode).
-> [SYNTHETIC — smoke test only, not a real-world benchmark]
+Method: the **real** pipeline run on `synthetic_v1`, `box_v1`, and extra synthetic
+variants I generated in a scratch folder (each run on 2 photo conditions). Probe code
+is not in the repo yet; §3 proposes committing it as proper generator extensions.
 
-| Defect kind | Detected today? | Evidence | Status |
+| Defect kind | Detected today? | Evidence | Gap | Status |
+|---|---|---|---|---|
+| **Missing component** | Yes | `synthetic_v1` MISSING recall 3/3; `box_v1` CAP/LABEL/BARCODE/SEAL 4/4 [SYNTHETIC] | none for these cases | **SUPPORTED** |
+| **Shifted component** | Yes | C4 shifted ~26 px 1/1; label shifted 1/1 [SYNTHETIC]. mm only via the scalar (Fix-up 4) | mm from transform | **SUPPORTED** (px) |
+| **Rotated component** | Only small angles | 12°/18° found 2/2 [SYNTHETIC]. Sweep is ±24°. **IC1 rotated 90° → reported MISSING (right verdict, wrong type); IC1 rotated 180° → GOOD, 2/2 photos** | large-angle and 180° flips | **PARTIAL** |
+| **Wrong component** | Verdict by accident, type wrong | Part swapped for a different part (IC1→resistor, C4→resistor): DEFECTIVE but typed `MISSING_COMPONENT`, 4/4 runs. A true `WRONG_COMPONENT` exists only via YOLO fusion (`component_match.py:85`), tested with injected detections (`test_yolo_integration.py:77-89`); no detector ships | correct type without ML | **PARTIAL** |
+| **Unexpected extra component** | **No — false accept** | Extra 46×46 cap, 110×70 IC, 22×9 resistor placed outside all regions: **GOOD in 6/6 runs**. YOLO path can emit it only with `yolo_flag_unexpected=True` (default off) and then `decide()` ignores it (see below) | no off-region check; decision hole | **NOT SUPPORTED** |
+| **Size deviation** | **No producer** | `SIZE_DEVIATION` is defined, has a severity entry and a label, but nothing emits it. 60 % size → DEFECTIVE typed MISSING (4/4); 125 % → typed SHIFTED (2/2) | no extent measurement | **NOT SUPPORTED** |
+| **Polarity / orientation** | **No — false accept at 180°** | IC1 rotated 180° → GOOD 2/2. The synthetic LED is a symmetric circle, so a flip is invisible and `check_rotation` is `false` for LED1. Design rotation (`DesignComponent.rotation_deg`) is parsed but never stored on regions or compared | design rotation not stored/compared; generator can't draw polarity | **NOT SUPPORTED** |
+| **Surface anomaly** | Gross / colour only | Wrong cap colour → VISUAL_ANOMALY 1/1 [SYNTHETIC]. Small stain (r=18 px on IC1) → **GOOD 2/2**. Surface mode on the real `box` photo (thresholds: defect < 0.55, review < 0.63 SSIM): 120 px-radius stain → sim 0.976 GOOD; red 160×80 sticker → 0.956 GOOD; a completely different object → 0.666 GOOD [SYNTHETIC edits of a real photo] | local anomalies hide inside a global score | **PARTIAL** |
+| **Crack / physical damage** | No | Thin dark line stand-in on IC1 → GOOD 2/2 (my drawing is a stand-in, not a real crack) | needs trained model + real images | **NOT SUPPORTED** → Phase 5 |
+| **Solder defect** | No | Bridge stand-in between IC pins → GOOD 2/2 (stand-in only) | needs real high-resolution imagery / ML | **NOT SUPPORTED** → Phase 5 |
+| **Structured expected vs observed** | Partial | free-text `expected`/`observed`; `expected_position`, `deviation_px`, `rotation_deg`; `deviation_mm` only for SHIFTED via scalar | machine-readable class/rotation/size, mm | **PARTIAL** |
+| **Confirmed vs suspected** | No | no `certainty` field; every defect has one meaning | schema + decision rule | **NOT SUPPORTED** |
+| **Stage on every defect** | Result-level only | `InspectionResult.stage_id` exists; `Defect` has none. `Defect.component` is the ref-des and `Defect.bbox` exists | `stage_id` per defect | **PARTIAL** |
+
+### The decision-engine hole (found by these probes)
+
+`decide()` only turns `CRITICAL_DEFECTS` (missing / shifted / rotated / wrong) and
+`VISUAL_ANOMALY` into DEFECTIVE. A defect list containing **only**
+`UNEXPECTED_COMPONENT` or **only** `SIZE_DEVIATION` falls through every branch and
+returns **GOOD** (verified by calling `decide()` directly). Today that is latent
+because nothing emits `SIZE_DEVIATION` and `UNEXPECTED_COMPONENT` needs a flag, but
+the moment a producer is added the result would read "GOOD" with a defect listed.
+This must be fixed **before** any new producer is added (see §4).
+
+### Other measurements
+
+On `synthetic_v1`: latency p50 434 ms, p95 456 ms, peak memory 89.5 MB (this sandbox).
+`box_v1` against `BOX_MODEL_001` (region mode): 11/11, 0 false accepts, localization
+7/7 [SYNTHETIC]. `box_v1` images against the real-photo `box` reference are a
+mismatched pairing and are not used as evidence.
+
+---
+
+## 2. Deterministic approach per gap (and what is not realistic)
+
+Feasibility numbers below are [SYNTHETIC]; the synthetic boards have much cleaner
+noise than real ones, so **they show the approach can separate the cases, not what
+error rate a real line will see.**
+
+| Gap | Approach | Measured separation [SYNTHETIC] | Verdict it can safely give | Real-data need |
+|---|---|---|---|---|
+| **Unexpected extra component** | Difference of aligned image vs reference **outside the union of region boxes** (+14 px margin, minus a border band), grey blur, threshold, open, largest connected blob area; ignore anything under a min area | good boards: **0 px²** (9 board/photo combos); extra cap: **1,396–1,663 px²**; extra IC: **6,636–6,731 px²**; **tiny 22×9 resistor: 15 px² → not detected** (similar brightness to the board; a colour-space diff would be needed) | `suspected` → **REVIEW only**, never DEFECTIVE | Yes — reflections, shadows, stickers, flux will create blobs; threshold must be tuned on real boards |
+| **Wrong component (no ML)** | When the template match fails, measure how much non-board material is in the region. Missing part → board visible; different part → material present | non-board fraction: present 1.0; **MISSING 0.0** (3/3 photos); **WRONG 1.0** (3/3 photos) | keep DEFECTIVE (both are blocking) but type it `WRONG_COMPONENT` with `observed_class = null` (class unknown without a detector) | Yes — on real boards a missing part leaves pads/solder, so the fraction is not 0 |
+| **Wrong component (class known)** | existing YOLO fusion | tested with injected detections only | as today | model + real data |
+| **Orientation / polarity** | Store the design rotation on the region. Compare the aligned patch to the reference patch at 0° and at 180° (and 90°/270°); a clearly better match at the flipped angle = orientation fault | IC1 normal: NCC@0 **0.81–0.94** vs @180 0.55–0.62; IC1 rotated 180°: NCC@0 0.56–0.63 vs @180 **0.79–0.89** (3/3 photos each way). Needs the margin rule `ncc@flip − ncc@0 > m` | confirmed DEFECTIVE when the margin is clear; REVIEW when both are close (symmetric parts) | Yes for the margin; polarity of really symmetric parts (resistors) is not decidable from shape |
+| **Size deviation** | Extent (w×h) of the non-board blob in the region window ÷ reference extent | IC1: normal **0.99–1.01**, 60 % → **0.60/0.68**, 125 % → **1.21–1.26** (3/3 photos); **C4 is noisy** (an outlier 1.2 at normal size, 1.0 at 60 %) because silkscreen text merges into the blob | large parts only (ICs, connectors); `suspected` → REVIEW | Yes |
+| **Local surface anomaly** | Per-region and per-tile diff in addition to the global SSIM | not measured — would need a tiled-diff probe first | `suspected` → REVIEW | Yes |
+| **Structured expected-vs-observed** | Pure data plumbing from values already measured | n/a | none (no verdict change) | no |
+| **Confirmed vs suspected** | Two independent signals agree → `confirmed`; one → `suspected` | n/a | see §4 rules | no |
+| **Stage on defect** | copy `InspectionResult.stage_id` into each defect | n/a | none | no |
+| **Cracks** | — | — | — | **Needs ML + real labelled images → Phase 5** |
+| **Solder defects** | — | — | — | **Needs real high-res / X-ray-class imagery + ML → Phase 5** |
+
+I will **not** claim crack, solder, tiny-part or small-stain detection in Phase 4.
+They stay NOT SUPPORTED and must be listed as such in the docs and (proposed) on the
+dashboard, because today those boards read GOOD.
+
+---
+
+## 3. Synthetic generator extensions (all labelled SYNTHETIC)
+
+Changes go in `scripts/make_synthetic_pcb.py` (component drawing + a new scene list)
+and `scripts/_scene.py` only if shared helpers are needed. **A new dataset
+`synthetic_p4` is written so the existing `synthetic_v1` images and results stay
+byte-for-byte unchanged** (regression gate). `_scene.py` exists today (earlier draft
+said it did not).
+
+| New image | Generator change | label | `expected_defects` |
 |---|---|---|---|
-| **Missing component** | YES — correlation < threshold | `defect_missing_R17.png` loc=1/1 [SYNTHETIC] | Supported |
-| **Shifted component** | YES — `offset_px > pos_tol` | `defect_shifted_C4.png` loc=1/1 [SYNTHETIC] | Supported |
-| **Rotated component** | YES — phase-correlation rotation | `defect_rotated_IC2.png` loc=1/1 [SYNTHETIC] | Supported |
-| **Wrong component** | NO — `WRONG_COMPONENT` defined but never emitted | No test image; `detector_agreement == "conflict"` not surfaced | Not supported (deterministic approach feasible with YOLO) |
-| **Unexpected extra component** | NO — `UNEXPECTED_COMPONENT` defined but never emitted | No test image; no diff-outside-regions detector | Not supported (deterministic approach feasible; high FP risk) |
-| **Size deviation** | NO — `SIZE_DEVIATION` defined but never emitted | No test image; no extent measurement | Not supported (deterministic approach feasible for large components) |
-| **Polarity / orientation** | Partial — rotation measured; no design-expected-rotation comparison; no polarity-specific logic | `check_rotation` flag exists; LED1 has `check_rotation: false` in synthetic | Partially supported |
-| **Surface anomaly** | Partial — VISUAL_ANOMALY via SSIM + colour delta; works in surface mode | `box_v1` VISUAL_ANOMALY [SYNTHETIC] | Partially supported (needs real calibration) |
-| **Crack / physical damage** | NO | No detector; requires trained model | Needs ML / real data → Phase 5 |
-| **Solder defect** | NO | No detector; requires microscope/X-ray level imaging | Needs ML / real data → Phase 5 |
-| **Structured expected-vs-observed** | Partial — free strings + position fields; `deviation_mm` populated via scalar only | See Fix-up 4 | Partially supported |
-| **Confirmed vs. suspected** | NO — no `certainty` field | All detections have same confidence semantics | Not supported (schema addition needed) |
-| **Stage on each defect** | NO — `stage_id` absent from Defect | `Defect.bbox` and `Defect.component` present; `stage_id` absent | Partially supported |
+| `defect_extra_cap` | draw an extra cap on bare board (e.g. 46×46 at 350,150) | REVIEW | `EXTRA1:UNEXPECTED_COMPONENT` |
+| `defect_extra_ic` | extra IC-sized part (110×70) | REVIEW | `EXTRA1:UNEXPECTED_COMPONENT` |
+| `defect_wrong_IC1` | draw a resistor body in the IC1 box | DEFECTIVE | `IC1:WRONG_COMPONENT` |
+| `defect_wrong_C4` | draw a resistor body in the C4 box | DEFECTIVE | `C4:WRONG_COMPONENT` |
+| `defect_size_IC1_small` | IC1 at 60 % of W×H | REVIEW | `IC1:SIZE_DEVIATION` |
+| `defect_size_IC1_big` | IC1 at 125 % | REVIEW | `IC1:SIZE_DEVIATION` |
+| `defect_flip_IC1` | IC1 rotated 180° (pin-1 mark moves) | DEFECTIVE | `IC1:ROTATED_COMPONENT` |
+| `defect_polarity_LED1` | give the LED a cathode bar (the current glyph is symmetric) and rotate 180° | DEFECTIVE | `LED1:ROTATED_COMPONENT` |
+| `good_p4_01..03` | clean boards incl. the new LED glyph and fresh noise seeds | GOOD | — |
+
+Manifest notes: `expected_defects` accepts `REF_DES:TYPE` strings. The engine will
+name off-region findings `EXTRA<n>` (stable order top-to-bottom, left-to-right) so the
+existing ref-des pattern (`[A-Za-z0-9_-]+`) still validates; the dict form with a
+`bbox` is used to pin position. Not representable in the generator, therefore **no
+synthetic test for them**: crack, solder, real surface contamination.
+
+**Harness bug to fix first (Decision D6):** `localization_match` in
+`scripts/harness.py` never enforces the bbox IoU — a trailing `return True` makes any
+ref-des+type match pass (verified: an expected box with IoU 0 still matches). No
+current manifest uses a bbox, so no published number changes, but the new
+`EXTRA<n>` entries rely on it.
 
 ---
 
-## 2. Deterministic approach per gap
+## 4. Schema additions (all additive and optional)
 
-### 2A — Wrong component
-When YOLO is active: `RegionMeasurement.detector_agreement == "conflict"` already means
-the detected class does not match `Region.expected_class`. Gate on `detector_confidence >= 0.50`.
-Emit `WRONG_COMPONENT` as `certainty="suspected"`. Without YOLO: no change (emit nothing).
-
-### 2B — Unexpected extra component
-Diff image (aligned actual vs. reference) outside the union of all region bboxes.
-Threshold on connected-component area > `AOI_UNEXPECTED_MIN_AREA_PX` (default 200 px²).
-Emit `UNEXPECTED_COMPONENT` as `certainty="suspected"` → triggers REVIEW only.
-High FP risk on real boards (reflections, shadows). Needs real-image tuning before production.
-
-> **Decision 3 needed:** Implement in Phase 4 (as REVIEW-only / suspected), or defer?
-
-### 2C — Size deviation
-Measure matched template extent vs. expected region WxH.
-Emit `SIZE_DEVIATION` as `certainty="suspected"` for large components only (ICs, connectors;
-skip resistors/caps where bbox extent measurement is too noisy).
-
-> **Decision 4 needed:** Implement in Phase 4 (limited to large components), or defer?
-
-### 2D — Polarity / orientation from design rotation
-Add `expected_rotation_deg` to `RegionTolerances` (populated by `import_placement`).
-Compare to `m.rotation_deg`. For `expected_class in {"led","cap"}` and measured deviation
-near 180°, label as polarity reversal in the `observed` string.
-
-### 2E — Structured expected-vs-observed fields
-Add machine-readable fields to `Defect` (see §4A). Populate from region and measurement.
-
-### 2F — Confirmed vs. suspected
-Two independent signals agree → `confirmed`; one signal → `suspected`.
-Decision engine: `suspected` alone → REVIEW (unless CRITICAL severity → DEFECTIVE).
-Invariants: no defect ever becomes GOOD; uncertain never becomes GOOD.
-
-### 2G — Stage on every defect
-Propagate `InspectionResult.stage_id` into each `Defect.stage_id` in pipeline.
-
-### 2H — Cracks / solder defects → Phase 5
-Not deterministically feasible. Require trained CNNs. No implementation in Phase 4.
-
----
-
-## 3. Synthetic generator extensions
-
-> All synthetic data labelled [SYNTHETIC].
-> Existing 10 images in `synthetic_v1` remain **unchanged**.
-
-### New defect images (added under `--include-phase4` flag)
-
-| New image | Defect type | Generator change | `expected_defects` |
-|---|---|---|---|
-| `defect_wrong_IC1.png` | WRONG_COMPONENT | Paint resistor silhouette in IC1 region | `["IC1:WRONG_COMPONENT"]` |
-| `defect_extra.png` | UNEXPECTED_COMPONENT | Paint extra component outside all regions | `["EXTRA:UNEXPECTED_COMPONENT"]` |
-| `defect_size_IC1.png` | SIZE_DEVIATION | Draw IC1 at 60% of normal WxH | `["IC1:SIZE_DEVIATION"]` |
-| `defect_polarity_LED1.png` | ROTATED_COMPONENT (polarity) | Draw LED1 rotated 180° | `["LED1:ROTATED_COMPONENT"]` |
-
-Generator changes go into `scripts/make_synthetic_pcb.py` only. `_scene.py` does not
-currently exist; scene drawing is inline. Will add `_draw_defect()` helpers.
-
----
-
-## 4. Schema additions (all additive/optional)
-
-### 4A — `Defect` in `backend/app/schemas/defect.py`
+`Defect` (`schemas/defect.py`) — new fields, all `None`/empty by default:
 
 ```python
-# All new fields: additive, nullable, default None
 certainty: Literal["confirmed", "suspected"] | None = None
-expected_class: str | None = None
-expected_rotation_deg: float | None = None
-observed_class: str | None = None
-observed_rotation_deg: float | None = None
+signals: list[str] = []                      # e.g. ["template_corr", "orientation_ncc"]
 stage_id: str | None = None
+expected_class: str | None = None;   observed_class: str | None = None
+expected_rotation_deg: float | None = None;  observed_rotation_deg: float | None = None
+expected_size_px: tuple[float, float] | None = None;  observed_size_px: ... = None
+expected_position_mm: tuple[float, float] | None = None; observed_position_mm: ... = None
+# existing and reused: component (ref-des), bbox, expected_position, actual_position,
+# deviation_px, deviation_mm, rotation_deg, allowed_*, severity, corrective_action
 ```
 
-### 4B — `RegionTolerances` in `backend/app/schemas/reference.py`
+`Region` gets `expected_rotation_deg: float | None` (a property of the design, not a
+tolerance — Decision D5; the earlier draft put it in `RegionTolerances`).
+`InspectionResult` gets `review_reasons: list[{code, component?, detail}] = []` so
+**every REVIEW carries a reason per cause**; new codes `SUSPECTED_DEFECT` and
+`AMBIGUOUS_ORIENTATION` are added to `ReasonCode` (the frontend's `types.ts` copy
+must be updated in the same change).
 
-```python
-expected_rotation_deg: float | None = None  # design-space rotation; None = use reference image orientation
+### Decision rules and invariants
+
+```
+alignment/quality failures                        -> REVIEW   (unchanged)
+any confirmed defect of a blocking type            -> DEFECTIVE (unchanged behaviour)
+any suspected defect, no confirmed one             -> REVIEW   (SUSPECTED_DEFECT + per-defect reason)
+no defects, all checks passed                      -> GOOD
 ```
 
-### 4C — Decision engine certainty rules
-
-```
-confirmed defect → DEFECTIVE (existing behaviour preserved)
-suspected defect + severity == CRITICAL → DEFECTIVE
-suspected defect + severity < CRITICAL → REVIEW (reason: SUSPECTED_DEFECT)
-no defects → GOOD
-invariant: GOOD never issued with any defect present
-invariant: certainty field alone never changes GOOD/DEFECTIVE/REVIEW
-```
-
-### 4D — `frontend/src/types.ts` additions to `Defect`
-
-```typescript
-certainty?: "confirmed" | "suspected" | null;
-expected_class?: string | null;
-expected_rotation_deg?: number | null;
-observed_class?: string | null;
-observed_rotation_deg?: number | null;
-stage_id?: string | null;
-```
+- **Severity can never change GOOD / DEFECTIVE / REVIEW.** Today this is true by
+  construction (`apply_severity` runs before `decide()` and `decide()` never reads
+  severity). The earlier draft's rule "suspected + CRITICAL severity → DEFECTIVE" would
+  have broken this and is **removed**: status depends on defect **type and certainty
+  only**. Test: shuffle/strip severity on the same defects → identical status.
+- **Uncertain never becomes GOOD.** `decide()` becomes total: every `DefectType` must
+  map to DEFECTIVE or REVIEW, and an unknown/new type defaults to **REVIEW**. Test:
+  loop over **every** `DefectType` and assert the status is never GOOD — this test
+  **fails on today's code** for `UNEXPECTED_COMPONENT` and `SIZE_DEVIATION`, which is
+  the point.
+- **Never downgrade an existing DEFECTIVE.** MISSING/SHIFTED/ROTATED/WRONG keep their
+  current verdicts; new off-region and size checks may only add REVIEW, not remove a
+  DEFECTIVE.
+- Naming caution: `CRITICAL_DEFECTS` (decides status) and severity `CRITICAL` (policy
+  label) are different things; shifted/rotated are in the former but `HIGH` in the
+  latter. The plan keeps them separate and renames the set to `VERDICT_BLOCKING`
+  (Decision D6).
 
 ---
 
-## 5. Files to change or add
+## 5. Files, tests, acceptance, risks
 
-### Modified files
+### Files
 
 | File | Change |
 |---|---|
-| `backend/app/schemas/defect.py` | Add 6 new optional fields |
-| `backend/app/schemas/reference.py` | Add `expected_rotation_deg` to `RegionTolerances` |
-| `backend/app/inspection/defect_detector.py` | Emit WRONG_COMPONENT; emit UNEXPECTED_COMPONENT; emit SIZE_DEVIATION; populate new fields; certainty logic |
-| `backend/app/inspection/decision_engine.py` | Add suspected-only → REVIEW rule |
-| `backend/app/inspection/pipeline.py` | Propagate `stage_id` to Defects; use transform-derived scale for `mm_per_px` when available |
-| `frontend/src/types.ts` | Add 6 new optional fields to `Defect` interface |
-| `data/policy/severity_actions.json` | Add WRONG_COMPONENT, UNEXPECTED_COMPONENT, SIZE_DEVIATION entries |
-| `scripts/make_synthetic_pcb.py` | Add 4 new defect images under `--include-phase4` flag |
+| `backend/app/inspection/decision_engine.py` | make `decide()` total; certainty rules; `review_reasons` |
+| `backend/app/schemas/defect.py`, `schemas/reference.py`, `schemas/inspection.py` | additive fields above |
+| `backend/app/inspection/defect_detector.py` | wrong-vs-missing refinement; orientation check; size check; populate structured fields + `stage_id` |
+| **new** `backend/app/inspection/extras.py` | off-region difference ("unexpected component") |
+| `backend/app/inspection/pipeline.py` | call the extras check; propagate `stage_id`; transform-derived mm (Fix-up 4) |
+| `backend/app/design/mapping.py` / `parser.py` | flatten + normalise package table, size columns, rotation → store `expected_rotation_deg` (Fix-up 3, D1) |
+| `backend/app/config.py` | new knobs (min blob area, orientation margin, size ratio band) — **new settings only; no existing threshold changes** |
+| `scripts/make_synthetic_pcb.py`, `scripts/harness.py` | §3 images; IoU fix |
+| `data/policy/severity_actions.json` | entries only if a new type is introduced (all 7 types already present) |
+| `frontend/src/types.ts` | mirror new optional fields |
+| docs: `ARCHITECTURE.md`, `ACCEPTANCE.md`, `README` | known-unsupported list; refresh stale module map |
 
-### New files
+### Tests (names indicative)
 
-| File | Purpose |
-|---|---|
-| `tests/test_phase4_detectors.py` | Tests for new detectors (wrong, unexpected, size, polarity) |
-| `tests/test_decision_engine_certainty.py` | Certainty → REVIEW/DEFECTIVE rule tests |
-| `docs/PHASE4_PLAN.md` | This document |
+- `test_decision_engine_total` — every `DefectType` ≠ GOOD; unknown type → REVIEW.
+- `test_severity_never_changes_status` — status identical with severity stripped/shuffled.
+- `test_certainty_rules` — confirmed → DEFECTIVE; suspected only → REVIEW with reason; none → GOOD.
+- `test_unexpected_component` — extra part above min area → `EXTRA1` suspected / REVIEW; clean boards (≥ 9 combos) → no blob; below-min part → nothing.
+- `test_wrong_vs_missing` — empty region → MISSING; other part present → WRONG, still DEFECTIVE.
+- `test_orientation_flip` — 180° IC → ROTATED with `expected/observed_rotation_deg`; symmetric/ambiguous → REVIEW.
+- `test_size_deviation` — IC 60 % / 125 % → suspected → REVIEW; small passives skipped.
+- `test_structured_fields` — class/rotation/size/position in px **and** mm when a transform exists.
+- `test_deviation_mm_from_transform` — Fix-up 4 cases (incl. disagreement warning, resize risk).
+- `test_stage_on_every_defect`.
+- `test_localization_iou_enforced` — harness fix.
+- `test_backward_compat` — all 148 existing tests unchanged; `synthetic_v1` statuses identical.
 
----
+### Acceptance criteria (numbers from `docs/ACCEPTANCE.md`, all still PROPOSED)
 
-## 6. Tests to write
+| Check | Gate | Today [SYNTHETIC] |
+|---|---|---|
+| FALSE ACCEPTS on `synthetic_v1` | 0 | 0 |
+| FALSE ACCEPTS on `synthetic_p4` (kinds this phase claims: extra, wrong, size, flip) | 0 | 8 of 8 probe runs are GOOD today (extra part 6, 180° flip 2); wrong-part and size probes are already DEFECTIVE (but mis-typed) |
+| Uncertain → never GOOD | always (unit test over every `DefectType`) | **fails** for 2 types |
+| `synthetic_v1` REVIEW rate | ≤ 0.20 | 0.20 (at the limit; new REVIEW-labelled images live in `synthetic_p4`, not `synthetic_v1`) |
+| Severity / corrective action populated | 100 % | 100 % |
+| Latency p50 / p95 | ≤ 2000 / ≤ 5000 ms | 434 / 456 ms; new checks budget +150 ms |
+| Peak memory | ≤ 512 MB | 89.5 MB |
+| Existing tests | 148/148 | 148/148 |
+| `npm run build` | 0 TypeScript errors | 0 |
 
-| Test class | Coverage |
-|---|---|
-| `TestWrongComponentDetection` | conflict + confidence ≥ 0.50 → WRONG_COMPONENT; no YOLO → no wrong defect |
-| `TestUnexpectedComponentDetection` | diff above threshold → UNEXPECTED_COMPONENT suspected; below → nothing |
-| `TestSizeDeviation` | large component at 60% size → SIZE_DEVIATION; small resistor → no SIZE_DEVIATION |
-| `TestPolarityFlip` | LED rotated 180° → ROTATED_COMPONENT with polarity message |
-| `TestCertaintyField` | two signals → confirmed; one signal → suspected |
-| `TestDecisionEngineCertainty` | suspected + < CRITICAL → REVIEW; suspected + CRITICAL → DEFECTIVE; confirmed → DEFECTIVE; no defect → GOOD; GOOD never with any defect |
-| `TestDeviationMmFromTransform` | transform-derived scale used when placement_transform set |
-| `TestStageOnDefect` | stage_id propagated from inspection to each defect |
-| `TestBackwardCompat` | All 148 existing tests still pass; new fields default None |
+Recall ≥ 0.90, false-positive rate ≤ 0.15 and localization ≥ 0.70 are **real-image**
+targets (≥ 30 images, ≥ 10 defective); they cannot be validated on synthetic data and
+are not claimed here. Cracks, solder, tiny parts, small stains and bare-board scratches
+are **excluded from the 0-false-accept claim and listed as known limitations.**
 
----
-
-## 7. Acceptance criteria
-
-> All targets inherit the PROPOSED status from ACCEPTANCE.md.
-
-| Check | Gate |
-|---|---|
-| FALSE ACCEPTS on synthetic_v1 | 0 (smoke) |
-| Severity populated — WRONG, UNEXPECTED, SIZE | 100% |
-| Corrective action populated — new types | 100% |
-| `suspected` alone never → GOOD | Always (unit test) |
-| Existing 148 tests | 148/148 pass |
-| New tests | All pass |
-| `npm run build` | 0 TypeScript errors |
-
----
-
-## 8. Risks
+### Risks
 
 | Risk | Likelihood | Mitigation |
 |---|---|---|
-| UNEXPECTED_COMPONENT FP on real boards | High | suspected only → REVIEW not DEFECTIVE; configurable threshold; document as needing real-image tuning |
-| WRONG_COMPONENT FP with low-confidence YOLO | Medium | Gate on confidence ≥ 0.50; suspected label; silent in DETERMINISTIC_ONLY mode |
-| SIZE_DEVIATION noisy on small components | High | Limit to large components (area > threshold); suspected only |
-| certainty rule increases REVIEW rate above 0.20 | Medium | Existing confirmed defects stay DEFECTIVE; only new suspected defects add to REVIEW; monitor synthetic_v1 REVIEW rate |
-| Schema additions break existing tests | Low | All fields additive/nullable; Pydantic default=None; existing assertions don't check new fields |
+| Off-region check flags reflections, shadows, stickers, flux, board-edge clutter on real boards | **High** | REVIEW only (never DEFECTIVE); border/margin masks; min area from real data; configurable; ship disabled-by-default until tuned on real images |
+| Real missing part leaves pads/solder → "missing vs wrong" fraction unreliable | Medium-High | verdict stays DEFECTIVE either way; only the type label changes; flagged UNVERIFIED |
+| Size check noisy on small parts (measured on C4) | High | large parts only; REVIEW only |
+| Orientation margin wrong for near-symmetric parts | Medium | ambiguous → REVIEW with reason, not GOOD |
+| Making `decide()` total could raise REVIEW volume | Medium | only new/unknown types go to REVIEW; existing verdicts frozen; watch `synthetic_v1` = 0.20 |
+| Schema additions break the frontend | Low | all fields optional; update `types.ts`; `npm run build` gate |
+| Reference > 1280 px puts regions/mm on the wrong scale | UNVERIFIED | test in 4B first (Fix-up 4) |
 
 ---
 
-## 9. Open decisions needed before implementation
+## 6. Decisions needed before implementation
 
-1. **Fix-up 3 (bbox sizes):** Option A (size from placement file), B (improve package table), or both?
-2. **Fix-up 4 (mm from transform):** Phase 4 or separate small fix before Phase 4?
-3. **UNEXPECTED_COMPONENT:** Implement in Phase 4 (suspected / REVIEW only) or defer?
-4. **SIZE_DEVIATION:** Implement in Phase 4 (large components only) or defer?
-5. **`expected_rotation_deg` on Region:** Store design-space rotation in `RegionTolerances`, or keep it only in the placement transform metadata?
+| # | Decision | Recommendation |
+|---|---|---|
+| **D1** | Bbox size fix: A (size columns), B (calibrated table + name normalisation), or both | B now + A when the file has sizes; C deferred |
+| **D2** | mm from the transform: inside Phase 4B or as a separate small fix first | separate small fix first (it unblocks mm on every defect) |
+| **D3** | Off-region "unexpected component" check: implement as REVIEW-only, or defer | implement, REVIEW-only, **off by default** until tuned on real images |
+| **D4** | Size deviation: implement for ICs/connectors only, or defer | implement, large parts only, REVIEW-only |
+| **D5** | Where the design rotation lives | `Region.expected_rotation_deg` (not tolerances) |
+| **D6** | Fix the decision-engine hole + harness IoU bug **first**, as their own commit | yes — nothing else should land before this |
+| **D7** | Emit `WRONG_COMPONENT` instead of `MISSING_COMPONENT` when the part is present but different (verdict unchanged) | yes |
+| **D8** | Acceptance targets | your line is still the `[EDIT THIS LINE]` placeholder — please confirm "as written" or give changes |
+
+### Found during this analysis, outside Phase 4A (not planned unless you ask)
+
+- The KiCad `.pos` parser expects a plain header line and `F`/`B` sides; a file in the
+  format I recall KiCad producing (`# Ref …` comment header, `top`/`bottom`) was
+  **rejected** in my test — please check against a real export (UNVERIFIED).
+- `col_map` in the generic CSV parser permanently appends to a module-level alias list.
+- `ARCHITECTURE.md` and `CHECKLIST.md` are stale (nonexistent `profiles/registry.py`,
+  `regions.json`, "22 passing").
+
+## 7. Corrections to the earlier draft of this file
+
+1. "`WRONG_COMPONENT` / `UNEXPECTED_COMPONENT` never emitted" — wrong: both are emitted
+   by `component_match.fuse` when a detector is active (UNEXPECTED needs a flag).
+2. "`_scene.py` does not exist" — it does.
+3. Rule "suspected + CRITICAL severity → DEFECTIVE" — removed; it let severity change
+   the verdict.
+4. Fix-up 4 said to call `scale_mm_to_px()` for `mm_per_px` — that value is px per mm
+   and must be inverted.
+5. Fix-up 4 implied mm is always available through the scalar — it is only there if
+   the reference was created with one.
+6. `_SYNTHETIC_PCB_DEMO` was described as usable; it is unreachable.
 
 ---
 
 > **R1 HARD STOP — Phase 4A plan only. No implementation started.**
-> Awaiting written approval and answers to the 5 decisions above before any code changes.
+> Awaiting your written approval and answers to D1–D8.
