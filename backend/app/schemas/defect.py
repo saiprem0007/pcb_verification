@@ -18,13 +18,28 @@ class DefectType(str, Enum):
     UNEXPECTED_COMPONENT = "UNEXPECTED_COMPONENT"  # component where none is expected (YOLO)
 
 
-# Defects that force a DEFECTIVE verdict when confirmed beyond tolerance.
-CRITICAL_DEFECTS: frozenset[DefectType] = frozenset(
+# Defect types that force a DEFECTIVE verdict when confirmed beyond tolerance.
+# (Named for what it DECIDES — the verdict. This is unrelated to the severity
+# label "CRITICAL" from the policy table: shifted/rotated are verdict-blocking
+# but severity HIGH. Status depends on type + certainty only, never on severity.)
+VERDICT_BLOCKING: frozenset[DefectType] = frozenset(
     {
         DefectType.MISSING_COMPONENT,
         DefectType.SHIFTED_COMPONENT,
         DefectType.ROTATED_COMPONENT,
         DefectType.WRONG_COMPONENT,
+    }
+)
+
+# Backward-compatible alias — existing imports keep working.
+CRITICAL_DEFECTS = VERDICT_BLOCKING
+
+# Defect types that, on their own, send the board to a human (REVIEW), never GOOD
+# and never DEFECTIVE: they come from heuristic checks (size, off-region diff).
+REVIEW_ONLY_DEFECTS: frozenset[DefectType] = frozenset(
+    {
+        DefectType.SIZE_DEVIATION,
+        DefectType.UNEXPECTED_COMPONENT,
     }
 )
 

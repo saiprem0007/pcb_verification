@@ -311,7 +311,16 @@ def _iou(a: list, b: list) -> float:
 def localization_match(expected: dict, result: "InspectionResult", *, iou_threshold: float = 0.3) -> bool:
     """Return True if the expected defect is matched in the result.
 
-    Match criteria: ref_des AND type match; if expected bbox given, IoU >= threshold.
+    Match criteria: ref_des AND type match; if an expected bbox is given AND the
+    defect carries a bbox, the IoU must be >= ``iou_threshold``.
+
+    Coordinate spaces: the expected bbox is ``[x, y, w, h]`` and ``Defect.bbox`` is
+    ``(x1, y1, x2, y2)``, both in aligned-image (reference) pixels.
+
+    Fallback: a defect that carries NO bbox cannot be compared, so ref_des + type
+    alone is accepted for it (documented, deliberate). A defect that HAS a bbox far
+    from the expected one is NOT a match (Phase 4B fix: a trailing ``return True``
+    used to accept it).  Every same-type defect is checked, not just the first.
     """
     exp_ref = expected["ref_des"]
     exp_type = expected["type"]
@@ -322,12 +331,13 @@ def localization_match(expected: dict, result: "InspectionResult", *, iou_thresh
             continue
         if exp_bbox is None:
             return True
-        if d.bbox is not None:
-            dx, dy = d.bbox[0], d.bbox[1]
-            dw, dh = d.bbox[2] - d.bbox[0], d.bbox[3] - d.bbox[1]
-            if _iou(exp_bbox, [dx, dy, dw, dh]) >= iou_threshold:
-                return True
-        return True   # ref_des+type match is enough when bbox comparison unavailable
+        if d.bbox is None:
+            return True   # bbox comparison unavailable -> ref_des + type is enough
+        dx, dy = d.bbox[0], d.bbox[1]
+        dw, dh = d.bbox[2] - d.bbox[0], d.bbox[3] - d.bbox[1]
+        if _iou(exp_bbox, [dx, dy, dw, dh]) >= iou_threshold:
+            return True
+        # else: keep looking at the remaining defects of the same ref_des/type
     return False
 
 

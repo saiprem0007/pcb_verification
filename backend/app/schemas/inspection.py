@@ -30,6 +30,9 @@ class ReasonCode(str, Enum):
     VISUAL_ANOMALY = "VISUAL_ANOMALY"
     LOW_CONFIDENCE = "LOW_CONFIDENCE"
     CONTRADICTORY = "CONTRADICTORY"
+    # A defect exists but is only suspected (heuristic / review-only type): a human
+    # must look. Never GOOD, never DEFECTIVE on its own.
+    SUSPECTED_DEFECT = "SUSPECTED_DEFECT"
 
 
 class QualityReport(BaseModel):
