@@ -35,7 +35,7 @@ def _bbox_xyxy(x: int, y: int, w: int, h: int) -> tuple[int, int, int, int]:
 
 def detect_region_defects(
     region: Region, m: RegionMeasurement, cfg: Settings, mm_per_px: float = 0.0,
-    board_similarity: float = 1.0,
+    board_similarity: float = 1.0, mm_scale=None,
 ) -> list[Defect]:
     tol = region.tolerances
     pos_tol = tol.position_tol_px if tol.position_tol_px is not None else cfg.region_position_tol_px
@@ -63,7 +63,15 @@ def detect_region_defects(
         return defects  # position/rotation meaningless if it isn't there
 
     if m.offset_px > pos_tol:
-        dev_mm = round(m.offset_px * mm_per_px, 3) if mm_per_px > 0 else None
+        if mm_scale is not None and m.observed_center is not None:
+            # Phase 4B (D2): mm via the transform's inverse (exact, per axis) when one
+            # exists, else the scalar -- see app.design.scale.
+            dev_mm = mm_scale.offset_mm(
+                m.observed_center[0] - m.expected_center[0],
+                m.observed_center[1] - m.expected_center[1],
+            )
+        else:
+            dev_mm = round(m.offset_px * mm_per_px, 3) if mm_per_px > 0 else None
         defects.append(
             Defect(
                 component=region.name,
@@ -148,11 +156,14 @@ def detect_all(
     cfg: Settings,
     mm_per_px: float = 0.0,
     board_similarity: float = 1.0,
+    mm_scale=None,
 ) -> list[Defect]:
     by_name = {m.name: m for m in measurements}
     out: list[Defect] = []
     for region in regions:
         m = by_name.get(region.name)
         if m is not None:
-            out.extend(detect_region_defects(region, m, cfg, mm_per_px, board_similarity))
+            out.extend(
+                detect_region_defects(region, m, cfg, mm_per_px, board_similarity, mm_scale)
+            )
     return out

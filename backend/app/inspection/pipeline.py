@@ -41,6 +41,8 @@ from . import (
     reference_checker,
     surface_check,
 )
+from ..design.scale import resolve_mm_scale
+from .frame import frame_scales, scale_regions
 from .severity import apply_severity
 from .visualization import annotate, montage
 
@@ -112,8 +114,16 @@ def run_inspection(
             alignment=AlignmentMetadata(success=False, reason="not run"),
         )
 
-    ref_bgr = preprocessing.resize_max(profile.load_reference_image(), cfg.image_max_dim)
+    ref_orig = profile.load_reference_image()
+    ref_bgr = preprocessing.resize_max(ref_orig, cfg.image_max_dim)
     ref_aspect = ref_bgr.shape[1] / ref_bgr.shape[0]
+
+    # Regions + the stored transform are in ORIGINAL reference pixels; the engine
+    # works on the (possibly down-scaled) reference.  Geometry only -- no threshold
+    # is changed, and this is an exact no-op when the reference already fits.
+    fsx, fsy = frame_scales(ref_orig.shape[:2], ref_bgr.shape[:2])
+    regions = scale_regions(profile.regions, fsx, fsy)
+    mm_scale = resolve_mm_scale(profile.reference, cfg.mm_per_px, (fsx + fsy) / 2.0)
 
     # ---- Stage A.2: board detection / crop ----------------------------
     working, det = detection.detect_board(original, cfg, ref_aspect)
@@ -142,11 +152,11 @@ def run_inspection(
     model_status = ModelStatus.DETERMINISTIC_ONLY
     heatmap = None
     if align_meta.success and quality.passed:
-        if profile.regions:
-            measurements = reference_checker.measure_all(profile.regions, aligned_bgr, ref_bgr, cfg)
+        if regions:
+            measurements = reference_checker.measure_all(regions, aligned_bgr, ref_bgr, cfg)
             defects = defect_detector.detect_all(
-                profile.regions, measurements, cfg,
-                profile.mm_per_px or cfg.mm_per_px, board_sim,
+                regions, measurements, cfg,
+                profile.mm_per_px or cfg.mm_per_px, board_sim, mm_scale,
             )
 
             # ---- Stage F.5: optional object-detector (YOLO) corroboration ----
@@ -156,7 +166,7 @@ def run_inspection(
             elif detector.status != MODEL_NOT_CONFIGURED:
                 raw = detector.detect(aligned_bgr)
                 measurements, extra, detections = component_match.fuse(
-                    profile.regions, measurements, raw, cfg
+                    regions, measurements, raw, cfg
                 )
                 defects = defects + extra
                 model_status = ModelStatus.YOLO_ACTIVE
@@ -200,6 +210,9 @@ def run_inspection(
         detections=detections,
         defects=defects,
         model_status=model_status,
+        mm_scale_source=mm_scale.source,
+        mm_per_px=round(mm_scale.mm_per_px, 6) if mm_scale.known else None,
+        warnings=[mm_scale.warning] if mm_scale.warning else [],
         cropped_image_path=media_url("cropped.png"),
         aligned_image_path=media_url("aligned.png"),
         annotated_image_path=media_url("annotated.png"),

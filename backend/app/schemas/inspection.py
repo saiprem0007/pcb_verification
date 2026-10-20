@@ -128,6 +128,14 @@ class InspectionResult(BaseModel):
     unit_id: str | None = None
     """Physical unit / serial number being inspected (caller-supplied, optional)."""
 
+    # ---- Millimetre reporting (Phase 4B, D2; additive, all optional) -------
+    mm_scale_source: str | None = None
+    """Where mm values came from: ``transform`` | ``scalar`` | ``config`` | ``none``."""
+    mm_per_px: float | None = None
+    """Isotropic mm per WORKING-frame pixel used for mm values (None when unknown)."""
+    warnings: list[str] = Field(default_factory=list)
+    """Non-fatal notes, e.g. the placement transform and the scalar mm_per_px disagree."""
+
 
 
 class ViewResult(BaseModel):
