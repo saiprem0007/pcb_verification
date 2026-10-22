@@ -51,7 +51,7 @@ can be added without touching the pipeline.
 The engine does not know what a "PCB" is. It operates on a **profile**: a reference
 image plus a list of inspection **regions**, each with expected position and
 tolerances. The box product (`BOX_MODEL_001`, `scripts/make_synthetic_box.py`) is
-exactly this — a reference image + `regions.json` — and runs the identical
+exactly this — a reference image + `meta.json` — and runs the identical
 pipeline. `kind` is a display label; no engine code branches on it.
 
 ---
@@ -95,8 +95,18 @@ backend/app/
 
   profiles/
     base.py               InspectionProfile (regions, reference, tolerances)
-    registry.py           load profiles from data/references/*
-    pcb.py                PCB-specific defaults / helpers
+    (profiles are loaded by storage/reference_repository.py)
+
+  design/                 placement-file import (Phase 3/4B)
+    parser.py             KiCad .pos / CSV placement parsers
+    mapping.py            package-size table, normalisation, mm -> reference-px regions
+    scale.py              resolve_mm_scale: mm <-> px from the design transform
+
+  inspection/ (additional)
+    severity.py           severity/action policy annotation (never changes status)
+    frame.py              scale regions into the resized working frame
+
+  schemas/stage.py        stage definitions (progression itself is deferred)
 
   models/                 OPTIONAL ML — behind interfaces, disabled by default
     __init__.py           build_component_detector(cfg) — YOLO if configured, else Null
@@ -227,7 +237,7 @@ overrides in the profile. Nothing is hard-coded in the engine.
 ```
 data/
   references/<REF_ID>/reference.png      known-good image
-  references/<REF_ID>/regions.json       region + tolerance definitions
+  references/<REF_ID>/meta.json          region + tolerance definitions (+ reference.png)
   test/                                  repeatable test images (synthetic + real)
   samples/                               a few checked-in demo images
   raw/  processed/                       dataset staging (PCB-SAID / DeepPCB / MVTec)

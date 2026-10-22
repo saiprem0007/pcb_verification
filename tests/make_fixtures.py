@@ -107,6 +107,41 @@ def main() -> None:
     (out_dir / "synthetic_pcb.csv").write_text("\n".join(csv_lines), "utf-8")
     print(f"wrote {out_dir / 'synthetic_pcb.csv'}")
 
+    # ---- Phase 4B variants (SYNTHETIC) -----------------------------------------
+    # (B) table path: package names that exist in data/policy/package_classes.json as
+    #     flattened *_SYNTH_* entries (sizes = the hand-made pixel extents * 0.12 mm).
+    # (A) file path: explicit size columns (SizeX SizeY / w_mm,h_mm), mm at rotation 0.
+    _PFX = {"ic": "IC", "resistor": "R", "cap": "C", "led": "LED", "connector": "J"}
+
+    def synth_pkg(kind: str, box) -> str:
+        return f"{_PFX[kind]}_SYNTH_{box[2]}x{box[3]}"
+
+    note = [
+        "# Phase 4B synthetic PCB placement fixture",
+        "# SYNTHETIC - smoke test only, NOT evidence of real-design support.",
+    ]
+    pos_synth = note + ["Ref Val Package PosX PosY Rot Side"]
+    pos_sized = note + ["Ref Val Package PosX PosY Rot Side SizeX SizeY"]
+    csv_sized = note + ["Ref,Value,Package,PosX,PosY,Rotation,Side,w_mm,h_mm"]
+    for fname, (fpx, fpy) in _FIDUCIALS:
+        xmm, ymm = px_to_mm(fpx, fpy)
+        pos_synth.append(f"{fname} fiducial FID_2mm {xmm} {ymm} 0 F")
+        pos_sized.append(f"{fname} fiducial FID_2mm {xmm} {ymm} 0 F")
+        csv_sized.append(f"{fname},fiducial,FID_2mm,{xmm},{ymm},0,F,,")
+    for name, box, kind in COMPONENTS:
+        cx, cy = component_center_px(box)
+        xmm, ymm = px_to_mm(int(cx), int(cy))
+        wmm, hmm = round(box[2] * MM_PER_PX, 4), round(box[3] * MM_PER_PX, 4)
+        pos_synth.append(f"{name} {kind.upper()} {synth_pkg(kind, box)} {xmm} {ymm} 0 F")
+        pos_sized.append(f"{name} {kind.upper()} {_KIND_TO_PACKAGE.get(kind, 'R_0603')} "
+                         f"{xmm} {ymm} 0 F {wmm} {hmm}")
+        csv_sized.append(f"{name},{kind.upper()},{_KIND_TO_PACKAGE.get(kind, 'R_0603')},"
+                         f"{xmm},{ymm},0,F,{wmm},{hmm}")
+    (out_dir / "synthetic_pcb_synthpkg.pos").write_text("\n".join(pos_synth) + "\n", "utf-8")
+    (out_dir / "synthetic_pcb_sized.pos").write_text("\n".join(pos_sized) + "\n", "utf-8")
+    (out_dir / "synthetic_pcb_sized.csv").write_text("\n".join(csv_sized) + "\n", "utf-8")
+    print("wrote synthetic_pcb_synthpkg.pos, synthetic_pcb_sized.pos, synthetic_pcb_sized.csv")
+
     # ---- Fiducial correspondence JSON -------------------------------------
     fid_data = []
     for fname, (fpx, fpy) in _FIDUCIALS:

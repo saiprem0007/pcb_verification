@@ -19,8 +19,11 @@ Usage:
 
 from __future__ import annotations
 
+import json
 import math
+import re
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Sequence
 
 import numpy as np
@@ -199,21 +202,176 @@ def compute_transform(
 
 
 # ---------------------------------------------------------------------------
-# Region generation from DesignComponents
+# Package table (design name -> class + nominal size in mm)
 # ---------------------------------------------------------------------------
+#
+# Size semantics: ``w_mm`` x ``h_mm`` is the nominal footprint extent of the part at
+# design rotation 0 (its native orientation), in millimetres.  Boxes are converted
+# to reference pixels through the fitted design transform, so they scale with the
+# image.  Sizes in the shipped table are UNREVIEWED approximations (``_reviewed:
+# false``) -- a real product needs its own calibrated values, or per-part size
+# columns in the placement file (which take priority).
+
+
+def _is_package_entry(v) -> bool:
+    return isinstance(v, dict) and "expected_class" in v
+
+
+def _flatten_package_table(raw: dict) -> dict:
+    """Flat ``{package: {expected_class, w_mm, h_mm}}`` from the shipped format.
+
+    Tolerates the legacy layout where entries sat inside a nested group (e.g.
+    ``_SYNTHETIC_PCB_DEMO``), which made them unreachable.  Metadata keys
+    (``_note``, ``_reviewed``, ...) are dropped.  Top-level entries win over nested.
+    """
+    flat: dict = {}
+    for key, val in raw.items():
+        if _is_package_entry(val):
+            flat[key] = val
+    for key, val in raw.items():
+        if isinstance(val, dict) and not _is_package_entry(val):
+            for k2, v2 in val.items():
+                if _is_package_entry(v2):
+                    flat.setdefault(k2, v2)
+    return flat
+
 
 def _load_package_table(table_path) -> dict:
-    """Load package → {expected_class, w_mm, h_mm} table from a JSON file."""
-    import json
-    from pathlib import Path
+    """Load + flatten the package table JSON.  Missing file -> ``{}``."""
     p = Path(table_path)
     if not p.is_file():
         return {}
-    return json.loads(p.read_text("utf-8"))
+    return _flatten_package_table(json.loads(p.read_text("utf-8")))
+
+
+# KiCad footprint names are "Library:Footprint_with_suffixes".  These steps peel the
+# suffixes in order and each intermediate form is tried against the table.
+_NORMALISE_STEPS: list[tuple[re.Pattern, str]] = [
+    (re.compile(r"_\d{4}Metric.*$"), ""),                       # R_0603_1608Metric
+    (re.compile(r"_\d+(?:\.\d+)?x\d+(?:\.\d+)?mm.*$"), ""),     # SOIC-8_3.9x4.9mm_P1.27mm
+    (re.compile(r"_P\d+(?:\.\d+)?mm.*$"), ""),                  # PinHeader_1x06_P2.54mm_Vertical
+    (re.compile(r"(_D\d+)\.\d+mm.*$"), r"\1"),                  # LED_D5.0mm -> LED_D5
+    (re.compile(r"_(?:Vertical|Horizontal|SMD|THT)$", re.I), ""),
+    (re.compile(r"^(?:LQ|TQ|L|T)(?=QFP-)"), ""),               # LQFP-48 -> QFP-48
+]
+
+
+def normalise_package_candidates(name: str) -> list[str]:
+    """Candidate table keys for a footprint name, most specific first."""
+    n = (name or "").strip()
+    if ":" in n:
+        n = n.rsplit(":", 1)[1]            # drop the KiCad library prefix
+    cands = [n]
+    cur = n
+    for pat, repl in _NORMALISE_STEPS:
+        nxt = pat.sub(repl, cur)
+        if nxt and nxt != cur:
+            cur = nxt
+            cands.append(cur)
+    seen: set[str] = set()
+    return [c for c in cands if c and not (c in seen or seen.add(c))]
 
 
 _DEFAULT_CLASS = "ic"
 _DEFAULT_SIZE_MM = (3.0, 3.0)   # fallback when package unknown and no size column
+
+# Class-initial heuristic for packages the table does not know (flagged fallback).
+_HEURISTIC = {
+    "R": ("resistor", 2.0, 1.0),
+    "C": ("cap",      2.0, 1.2),
+    "U": ("ic",       8.0, 5.0),
+    "Q": ("ic",       4.0, 4.0),
+    "D": ("led",      2.5, 2.5),
+    "J": ("connector", 10.0, 5.0),
+    "L": ("ic",       3.0, 3.0),  # inductor -> ic-like
+}
+
+
+def _resolve_package(package: str, table: dict) -> dict:
+    """Look up a package in the table; fall back gracefully (flagged ``_is_fallback``).
+
+    Order: exact -> normalised KiCad name -> longest key that prefixes the name ->
+    first-letter heuristic -> generic default.  The matched table key is returned
+    as ``_key`` when one was found.
+    """
+    if not package:
+        return {"expected_class": _DEFAULT_CLASS, "w_mm": _DEFAULT_SIZE_MM[0],
+                "h_mm": _DEFAULT_SIZE_MM[1], "_is_fallback": True}
+
+    lower = {k.lower(): k for k, v in table.items() if _is_package_entry(v)}
+    cands = normalise_package_candidates(package)
+    for c in cands:
+        key = c if c in table and _is_package_entry(table[c]) else lower.get(c.lower())
+        if key is not None:
+            return {**table[key], "_key": key}
+
+    # longest table key that prefixes the (normalised) name, on a token boundary
+    base = cands[-1]
+    for key in sorted(lower.values(), key=len, reverse=True):
+        if base.lower().startswith(key.lower()):
+            rest = base[len(key):len(key) + 1]
+            if rest == "" or not rest.isalnum():
+                return {**table[key], "_key": key}
+
+    first = package.split(":")[-1].upper().lstrip("0123456789")[:1] or "X"
+    if first in _HEURISTIC:
+        cls, wm, hm = _HEURISTIC[first]
+        return {"expected_class": cls, "w_mm": wm, "h_mm": hm, "_is_fallback": True}
+    return {"expected_class": _DEFAULT_CLASS, "w_mm": _DEFAULT_SIZE_MM[0],
+            "h_mm": _DEFAULT_SIZE_MM[1], "_is_fallback": True}
+
+
+# ---------------------------------------------------------------------------
+# Region generation from DesignComponents
+# ---------------------------------------------------------------------------
+#
+# Angle convention (Region.expected_rotation_deg)
+# -----------------------------------------------
+# The placement file's rotation is counter-clockwise-positive in the board's own
+# plane (KiCad convention, viewed from the top).  ``Region.expected_rotation_deg``
+# is the same angle expressed on the REFERENCE IMAGE AS SEEN ON SCREEN: counter-
+# clockwise positive, 0 = the package's native orientation (the OpenCV
+# ``getRotationMatrix2D`` convention that the synthetic generator uses).
+#
+# The two agree when the design->image mapping flips handedness (y-up CAD ->
+# y-down image, det < 0) and are opposite when it does not (det > 0, e.g. a file
+# whose Y already grows downward, like the synthetic fixtures).  Hence
+#     expected_rotation_deg = +rot_file  if det(A) < 0  else  -rot_file
+# UNVERIFIED on real boards / a real KiCad export.
+
+
+def screen_rotation_deg(rot_file_deg: float, transform: "DesignTransform") -> float:
+    """File rotation (CCW, board plane) -> CCW-positive on-screen angle, in (-180, 180]."""
+    det = float(np.linalg.det(transform.matrix[:, :2]))
+    a = rot_file_deg if det < 0 else -rot_file_deg
+    a = (a + 180.0) % 360.0 - 180.0
+    if a == -180.0:
+        a = 180.0
+    return round(a + 0.0, 4)
+
+
+def _box_px(
+    transform: "DesignTransform", cx_mm: float, cy_mm: float,
+    w_mm: float, h_mm: float, rot_file_deg: float,
+) -> tuple[int, int, int, int]:
+    """Axis-aligned pixel box of a (w x h) mm rectangle rotated about its centre.
+
+    All four corners go through the full affine, so anisotropic scale, board
+    rotation and flips are handled exactly (the old code used one isotropic
+    scale and ignored the part's own rotation).
+    """
+    th = math.radians(rot_file_deg)
+    c, s = math.cos(th), math.sin(th)
+    xs: list[float] = []
+    ys: list[float] = []
+    for sx, sy in ((-1, -1), (1, -1), (1, 1), (-1, 1)):
+        lx, ly = sx * w_mm / 2.0, sy * h_mm / 2.0
+        px, py = transform.apply_mm(cx_mm + lx * c - ly * s, cy_mm + lx * s + ly * c)
+        xs.append(px)
+        ys.append(py)
+    x0, x1, y0, y1 = min(xs), max(xs), min(ys), max(ys)
+    return (int(round(x0)), int(round(y0)),
+            max(1, int(round(x1 - x0))), max(1, int(round(y1 - y0))))
 
 
 def components_to_regions(
@@ -223,94 +381,63 @@ def components_to_regions(
     *,
     side_filter: str = "F",
 ) -> list[dict]:
-    """Convert DesignComponents to Region dicts (design mm → reference px).
+    """Convert DesignComponents to Region dicts (design mm -> reference px).
 
-    Parameters
-    ----------
-    components:
-        Iterable of :class:`~app.design.parser.DesignComponent`.
-    transform:
-        A fitted :class:`DesignTransform`.
-    package_table:
-        Dict mapping package name (or prefix) → ``{expected_class, w_mm, h_mm}``.
-    side_filter:
-        Only include components on this board side ('F' or 'B').
+    Size priority (D1): (A) ``comp.size_mm`` from the placement file, else (B) the
+    package table (after KiCad-name normalisation), else a flagged fallback.  Both
+    are in mm at rotation 0 and are mapped to pixels through ``transform``.
 
-    Returns a list of dicts suitable for :class:`~app.schemas.reference.Region`.
+    Extra keys (underscore-prefixed) record provenance: ``_size_source``
+    (``file``/``table``/``fallback``), ``_size_mm``, ``_package``, ``_pkg_fallback``.
     """
     regions = []
     for comp in components:
         if comp.side.upper() != side_filter.upper():
             continue
 
-        # Resolve package info
         pkg_info = _resolve_package(comp.package, package_table)
         expected_class = pkg_info["expected_class"]
 
-        # Determine size in mm
         if comp.size_mm is not None:
             w_mm, h_mm = comp.size_mm
+            size_source = "file"
         else:
             w_mm = pkg_info.get("w_mm", _DEFAULT_SIZE_MM[0])
             h_mm = pkg_info.get("h_mm", _DEFAULT_SIZE_MM[1])
-            if pkg_info.get("_is_fallback"):
-                # Mark for caller so they can report unknown packages
-                pass  # expected_class already flagged
+            size_source = "fallback" if pkg_info.get("_is_fallback") else "table"
 
-        # Convert center + half-sizes to four corners in mm, then map to px
-        cx_px, cy_px = transform.apply_mm(comp.pos_x_mm, comp.pos_y_mm)
-        # Scale mm sizes to px using the transform's scale
-        scale = transform.scale_mm_to_px()
-        w_px = w_mm * scale
-        h_px = h_mm * scale
-
-        x = int(round(cx_px - w_px / 2))
-        y = int(round(cy_px - h_px / 2))
-        w = max(1, int(round(w_px)))
-        h = max(1, int(round(h_px)))
+        x, y, w, h = _box_px(transform, comp.pos_x_mm, comp.pos_y_mm, w_mm, h_mm,
+                             comp.rotation_deg)
 
         regions.append({
             "name": comp.ref_des,
             "bbox": (x, y, w, h),
             "expected_class": expected_class,
+            "expected_rotation_deg": screen_rotation_deg(comp.rotation_deg, transform),
             "tolerances": {"check_rotation": expected_class != "led"},
             "_from_placement": True,
             "_package": comp.package,
             "_pkg_fallback": pkg_info.get("_is_fallback", False),
+            "_size_source": size_source,
+            "_size_mm": (round(float(w_mm), 4), round(float(h_mm), 4)),
         })
 
     return regions
 
 
-def _resolve_package(package: str, table: dict) -> dict:
-    """Look up a package name in the table; fall back gracefully."""
-    if not package:
-        return {"expected_class": _DEFAULT_CLASS, "w_mm": _DEFAULT_SIZE_MM[0],
-                "h_mm": _DEFAULT_SIZE_MM[1], "_is_fallback": True}
+def regions_from_dicts(raw_regions: list[dict]) -> list:
+    """Build :class:`~app.schemas.reference.Region` objects from the dicts above."""
+    from ..schemas.reference import Region, RegionTolerances
 
-    # Exact match
-    if package in table:
-        return table[package]
-
-    # Prefix match (e.g. "R_0402" matches key "R_")
-    for key, val in table.items():
-        if package.startswith(key):
-            return val
-
-    # Class-initial heuristic (R→resistor, C→capacitor, IC/U→ic, D→led, J→connector)
-    first = package.upper().lstrip("0123456789")[0] if package.strip("0123456789") else "X"
-    _heuristic = {
-        "R": ("resistor", 2.0, 1.0),
-        "C": ("cap",      2.0, 1.2),
-        "U": ("ic",       8.0, 5.0),
-        "Q": ("ic",       4.0, 4.0),
-        "D": ("led",      2.5, 2.5),
-        "J": ("connector", 10.0, 5.0),
-        "L": ("ic",       3.0, 3.0),  # inductor → ic-like
-    }
-    if first in _heuristic:
-        cls, wm, hm = _heuristic[first]
-        return {"expected_class": cls, "w_mm": wm, "h_mm": hm, "_is_fallback": True}
-
-    return {"expected_class": _DEFAULT_CLASS, "w_mm": _DEFAULT_SIZE_MM[0],
-            "h_mm": _DEFAULT_SIZE_MM[1], "_is_fallback": True}
+    return [
+        Region(
+            name=r["name"],
+            bbox=r["bbox"],
+            expected_class=r["expected_class"],
+            expected_rotation_deg=r.get("expected_rotation_deg"),
+            tolerances=RegionTolerances(
+                check_rotation=r["tolerances"].get("check_rotation", True)
+            ),
+        )
+        for r in raw_regions
+    ]

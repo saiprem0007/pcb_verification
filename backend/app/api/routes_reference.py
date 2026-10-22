@@ -257,6 +257,8 @@ class ImportPlacementResult(BaseModel):
     fallback_packages: list[str]
     residuals: list[dict]
     dry_run: bool
+    # Phase 4B: where each region's size came from (file | table | fallback) -> count
+    size_sources: dict[str, int] = {}
 
 
 @router.post("/{reference_id}/import_placement", response_model=ImportPlacementResult)
@@ -281,10 +283,9 @@ async def import_placement(
     from ..config import get_settings
     from ..design.parser import parse_placement, PlacementParseError
     from ..design.mapping import (
-        Fiducial, compute_transform, components_to_regions, TransformError,
-        _load_package_table,
+        Fiducial, compute_transform, components_to_regions, regions_from_dicts,
+        TransformError, _load_package_table,
     )
-    from ..schemas.reference import RegionTolerances
 
     cfg = get_settings()
 
@@ -333,17 +334,7 @@ async def import_placement(
     raw_regions = components_to_regions(non_fid, transform, package_table, side_filter=side)
     fallback_pkgs = sorted({r["_package"] for r in raw_regions if r.get("_pkg_fallback")})
 
-    new_regions = [
-        Region(
-            name=r["name"],
-            bbox=r["bbox"],
-            expected_class=r["expected_class"],
-            tolerances=RegionTolerances(
-                check_rotation=r["tolerances"].get("check_rotation", True)
-            ),
-        )
-        for r in raw_regions
-    ]
+    new_regions = regions_from_dicts(raw_regions)
 
     if not dry_run:
         if overwrite_regions:
@@ -378,4 +369,6 @@ async def import_placement(
             for r in transform.residuals
         ],
         dry_run=dry_run,
+        size_sources={k: sum(1 for r in raw_regions if r['_size_source'] == k)
+                      for k in ('file', 'table', 'fallback')},
     )

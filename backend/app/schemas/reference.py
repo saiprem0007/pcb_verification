@@ -36,6 +36,13 @@ class Region(BaseModel):
     # Region box in REFERENCE image pixel coords: [x, y, w, h]
     bbox: tuple[int, int, int, int]
     expected_class: str | None = None
+    # Design orientation of the part, degrees, COUNTER-CLOCKWISE POSITIVE as seen on
+    # the reference image on screen (OpenCV getRotationMatrix2D convention); 0 = the
+    # package's native orientation.  None = not known (hand-made regions).  Set by
+    # placement import from the file rotation + the transform handedness (see
+    # app.design.mapping.screen_rotation_deg).  A property of the design, not a
+    # tolerance.  Additive/optional (Phase 4B, D5).
+    expected_rotation_deg: float | None = None
     tolerances: RegionTolerances = Field(default_factory=RegionTolerances)
 
     @property

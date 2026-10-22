@@ -48,3 +48,20 @@ def reference(env):
     )
     repo.activate(gen.REF_ID)
     return env, gen
+
+
+@pytest.fixture(scope="session")
+def synthetic_v1_dir(tmp_path_factory):
+    """SYNTHETIC dataset ``synthetic_v1`` generated into a temp dir.
+
+    Tests no longer depend on a pre-generated, git-ignored ``data/datasets``.
+    Generation is deterministic (seeded), same code as make_synthetic_pcb.py.
+    """
+    import make_synthetic_pcb as gen
+    ds = tmp_path_factory.mktemp("datasets") / gen.DATASET
+    cases = [
+        (name, gen.photograph(gen.render_board(**bkw), **pkw), label, expected, note)
+        for name, label, bkw, pkw, expected, note in gen.SCENES
+    ]
+    gen.write_dataset(ds, gen.DATASET, gen.REF_ID, "test-generated synthetic dataset", cases)
+    return ds

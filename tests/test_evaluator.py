@@ -148,11 +148,9 @@ class TestMetricsConfusionMath:
 
 class TestManifestLoading:
 
-    def test_valid_manifest_loads(self):
-        """Load synthetic_v1 manifest from the repo — must return 10 entries."""
-        ds_dir = Path("data/datasets/synthetic_v1")
-        if not ds_dir.is_dir():
-            pytest.skip("synthetic_v1 dataset not generated; run make_synthetic_pcb.py")
+    def test_valid_manifest_loads(self, synthetic_v1_dir):
+        """Load generated synthetic_v1 manifest — must return 10 entries."""
+        ds_dir = synthetic_v1_dir
         m = load_manifest(ds_dir)
         assert isinstance(m, Manifest)
         assert len(m.images) == 10
@@ -342,21 +340,6 @@ class TestApiVsCliParity:
         get_settings.cache_clear()
         return cfg, gen
 
-    def _get_one_image(self, label: str, ds_dir: Path):
-        """Pick the first image with the given label from synthetic_v1."""
-        from app.config import get_settings
-        cfg = get_settings()
-        real_ds = cfg.data_dir / "datasets" / "synthetic_v1"
-        if not real_ds.is_dir():
-            pytest.skip("synthetic_v1 not generated; run make_synthetic_pcb.py")
-        m = load_manifest(real_ds)
-        for entry in m.images:
-            if entry.label == label:
-                img_path = real_ds / entry.file
-                if img_path.is_file():
-                    return entry, real_ds
-        pytest.skip(f"no image with label={label} found in synthetic_v1")
-
     def _cli_result(self, entry, ds_dir, cfg):
         from app.storage.reference_repository import ReferenceRepository
         profile = ReferenceRepository(cfg).load_profile(None)
@@ -376,7 +359,7 @@ class TestApiVsCliParity:
         return resp.json()
 
     @pytest.mark.parametrize("label", ["GOOD", "DEFECTIVE"])
-    def test_status_parity(self, label, reference):
+    def test_status_parity(self, label, reference, synthetic_v1_dir):
         """SYNTHETIC — API and CLI must produce identical status for same image.
 
         Uses the real synthetic_v1 dataset images so the pipeline has a real
@@ -385,9 +368,7 @@ class TestApiVsCliParity:
         """
         cfg, gen = reference
 
-        real_ds_dir = Path("data/datasets/synthetic_v1")
-        if not real_ds_dir.is_dir():
-            pytest.skip("synthetic_v1 not generated; run make_synthetic_pcb.py")
+        real_ds_dir = synthetic_v1_dir
 
         m = load_manifest(real_ds_dir)
         target_entry = None
@@ -395,8 +376,7 @@ class TestApiVsCliParity:
             if entry.label == label and (real_ds_dir / entry.file).is_file():
                 target_entry = entry
                 break
-        if target_entry is None:
-            pytest.skip(f"No {label} image found in synthetic_v1")
+        assert target_entry is not None, f"No {label} image found in synthetic_v1"
 
         img_path = real_ds_dir / target_entry.file
 

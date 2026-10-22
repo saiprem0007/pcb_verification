@@ -58,34 +58,63 @@ class PlacementParseError(ValueError):
 
 _KICAD_COLUMNS = ("Ref", "Val", "Package", "PosX", "PosY", "Rot", "Side")
 
+# Side spellings -> "F" / "B".  KiCad's own export writes "top" / "bottom".
+_SIDE_ALIASES = {
+    "F": "F", "FRONT": "F", "TOP": "F", "T": "F",
+    "B": "B", "BACK": "B", "BOTTOM": "B",
+}
+
+
+def _size_pair(w, h) -> tuple[float, float] | None:
+    """(w, h) in mm if both are finite and > 0, else None (malformed -> ignored)."""
+    try:
+        wf, hf = float(w), float(h)
+    except (TypeError, ValueError):
+        return None
+    if not (wf > 0 and hf > 0) or wf != wf or hf != hf or wf == float("inf") or hf == float("inf"):
+        return None
+    return (wf, hf)
+
 
 def _parse_kicad_pos(text: str, source_name: str = "<unknown>") -> list[DesignComponent]:
-    """Parse a KiCad .pos file.
+    """Parse a KiCad ``.pos`` file.
 
-    KiCad .pos files begin with comment lines starting with '#', then a header
-    line "Ref  Val  Package  PosX  PosY  Rot  Side" and then data rows.
+    Two layouts are accepted:
+
+    * **KiCad export style** (hand-built from the documented format; real-export
+      support is UNVERIFIED): ``###`` / ``##`` comment lines, the column header as a
+      comment ``# Ref  Val  Package  PosX  PosY  Rot  Side``, data rows with Side
+      ``top`` / ``bottom``, and a trailing ``## End``.
+    * **Plain style** (earlier fixtures): the header ``Ref Val Package PosX PosY Rot
+      Side`` as the first non-comment line.
+
+    Side accepts ``F``/``B`` and ``top``/``bottom`` (also front/back), any case.
+    Optional columns 8 and 9 are the part size ``SizeX SizeY`` in mm at rotation 0
+    (used in preference to the package table).
 
     Raises :class:`PlacementParseError` on format errors.
     """
-    lines = text.splitlines()
     data_lines: list[str] = []
     header_found = False
 
-    for line in lines:
+    for line in text.splitlines():
         stripped = line.strip()
-        if not stripped or stripped.startswith("#"):
+        if not stripped:
             continue
+        if stripped.startswith("#"):
+            # "# Ref Val Package PosX PosY Rot Side" (KiCad) is a comment-style header
+            if not header_found and stripped.lstrip("#").split()[:7] == list(_KICAD_COLUMNS):
+                header_found = True
+            continue                     # all other '#', '##', '###' lines are comments
         if not header_found:
-            # The first non-comment line must be the header
             cols = stripped.split()
             if cols[:7] == list(_KICAD_COLUMNS):
                 header_found = True
                 continue
-            else:
-                raise PlacementParseError(
-                    f"{source_name}: expected KiCad .pos header "
-                    f"'{' '.join(_KICAD_COLUMNS)}', got: {stripped!r}"
-                )
+            raise PlacementParseError(
+                f"{source_name}: expected KiCad .pos header "
+                f"'{' '.join(_KICAD_COLUMNS)}', got: {stripped!r}"
+            )
         data_lines.append(stripped)
 
     if not header_found:
@@ -112,18 +141,13 @@ def _parse_kicad_pos(text: str, source_name: str = "<unknown>") -> list[DesignCo
             raise PlacementParseError(
                 f"{source_name}: line {lineno}: cannot parse numeric values: {exc}"
             ) from exc
-        side = parts[6].upper()
-        if side not in ("F", "B"):
+        side = _SIDE_ALIASES.get(parts[6].upper())
+        if side is None:
             raise PlacementParseError(
-                f"{source_name}: line {lineno}: Side must be 'F' or 'B', got {side!r}"
+                f"{source_name}: line {lineno}: Side must be 'F'/'B' (or top/bottom), "
+                f"got {parts[6]!r}"
             )
-        # Optional size columns (col 7=W_mm, col 8=H_mm)
-        size: tuple[float, float] | None = None
-        if len(parts) >= 9:
-            try:
-                size = (float(parts[7]), float(parts[8]))
-            except ValueError:
-                pass  # ignore malformed optional columns
+        size = _size_pair(parts[7], parts[8]) if len(parts) >= 9 else None
 
         components.append(DesignComponent(
             ref_des=ref, value=val, package=pkg,
@@ -147,12 +171,19 @@ _CSV_COL_ALIASES: dict[str, list[str]] = {
     "pos_y":   ["posy", "pos_y", "y", "center_y", "y_mm", "posy_mm"],
     "rotation":["rotation", "rot", "angle", "rotation_deg"],
     "side":    ["side", "layer", "board_side"],
+    # optional part size in mm at rotation 0 (used in preference to the package table)
+    "size_w":  ["w_mm", "width_mm", "width", "size_x", "sizex", "size_w"],
+    "size_h":  ["h_mm", "height_mm", "height", "size_y", "sizey", "size_h"],
 }
 
 
-def _find_col(header: list[str], canonical: str) -> int | None:
-    """Return the index of a column in header matching one of the known aliases."""
-    aliases = _CSV_COL_ALIASES.get(canonical, [canonical])
+def _find_col(header: list[str], canonical: str,
+              alias_map: dict[str, list[str]] | None = None) -> int | None:
+    """Return the index of a column in header matching one of the known aliases.
+
+    ``alias_map`` is a per-call copy; the module-level table is never mutated.
+    """
+    aliases = (alias_map or _CSV_COL_ALIASES).get(canonical, [canonical])
     for i, col in enumerate(header):
         if col.lower().replace(" ", "_").replace("-", "_") in aliases:
             return i
@@ -187,15 +218,20 @@ def _parse_generic_csv(
 
     raw_header = [c.strip() for c in rows[header_row_idx]]
 
-    # Apply caller-supplied column aliases
+    # Caller-supplied column aliases go into a PER-CALL copy (the module-level table
+    # must never be mutated -- it used to grow on every call).
+    alias_map: dict[str, list[str]] = {k: list(v) for k, v in _CSV_COL_ALIASES.items()}
     if col_map:
         for canonical, actual in col_map.items():
-            if canonical in _CSV_COL_ALIASES:
-                _CSV_COL_ALIASES[canonical].insert(0, actual.lower())
+            if canonical in alias_map:
+                alias_map[canonical].insert(
+                    0, actual.lower().replace(" ", "_").replace("-", "_")
+                )
 
     col_idx: dict[str, int | None] = {
-        f: _find_col(raw_header, f)
-        for f in ("ref_des", "value", "package", "pos_x", "pos_y", "rotation", "side")
+        f: _find_col(raw_header, f, alias_map)
+        for f in ("ref_des", "value", "package", "pos_x", "pos_y", "rotation", "side",
+                  "size_w", "size_h")
     }
     required = ("ref_des", "pos_x", "pos_y")
     missing = [f for f in required if col_idx[f] is None]
@@ -204,7 +240,7 @@ def _parse_generic_csv(
             f"{source_name}: CSV missing required columns: {missing}. "
             f"Header found: {raw_header}. "
             f"Provide a col_map or rename columns to match: "
-            + ", ".join(f"'{k}': {v}" for k, v in _CSV_COL_ALIASES.items())
+            + ", ".join(f"'{k}': {v}" for k, v in alias_map.items())
         )
 
     components: list[DesignComponent] = []
@@ -226,10 +262,7 @@ def _parse_generic_csv(
 
         val = _get("value")
         pkg = _get("package")
-        side_raw = _get("side", "F").upper()
-        side = side_raw[0] if side_raw else "F"
-        if side not in ("F", "B"):
-            side = "F"
+        side = _SIDE_ALIASES.get(_get("side", "F").upper(), "F")   # unknown -> F (lenient)
 
         try:
             px = float(_get("pos_x", "0"))
@@ -244,10 +277,15 @@ def _parse_generic_csv(
         except ValueError:
             rot = 0.0
 
+        size = (
+            _size_pair(_get("size_w"), _get("size_h"))
+            if col_idx["size_w"] is not None and col_idx["size_h"] is not None else None
+        )
+
         components.append(DesignComponent(
             ref_des=ref, value=val, package=pkg,
             pos_x_mm=px, pos_y_mm=py, rotation_deg=rot,
-            side=side, size_mm=None,
+            side=side, size_mm=size,
         ))
 
     if not components:
@@ -263,10 +301,14 @@ def _looks_like_kicad_pos(text: str) -> bool:
     """Heuristic: does this text look like a KiCad .pos file?"""
     for line in text.splitlines():
         stripped = line.strip()
-        if not stripped or stripped.startswith("#"):
+        if not stripped:
             continue
-        cols = stripped.split()
-        return cols[:7] == list(_KICAD_COLUMNS)
+        if stripped.startswith("#"):
+            # KiCad's export carries the column header as a comment line
+            if stripped.lstrip("#").split()[:7] == list(_KICAD_COLUMNS):
+                return True
+            continue
+        return stripped.split()[:7] == list(_KICAD_COLUMNS)
     return False
 
 

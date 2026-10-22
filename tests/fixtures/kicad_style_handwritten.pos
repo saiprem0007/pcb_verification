@@ -1,0 +1,13 @@
+### Module positions - created on 2026-10-19 12:00:00 ###
+### Printed by Pcbnew version 7.0.0
+## Unit = mm, Angle = deg.
+## Side : All
+# Ref     Val       Package                           PosX       PosY       Rot  Side
+FID1      fiducial  FID_2mm                         6.6000     6.6000    0.0000  top
+FID2      fiducial  FID_2mm                       101.4000     6.6000    0.0000  top
+FID3      fiducial  FID_2mm                         6.6000    70.2000    0.0000  top
+R1        10k       Resistor_SMD:R_0603_1608Metric 21.0000    37.2000   90.0000  top
+U1        STM32     Package_SO:SOIC-8_3.9x4.9mm_P1.27mm 40.0000 20.0000  180.0000  top
+LED1      green     LED_THT:LED_D5.0mm              80.0000    38.0000    0.0000  top
+C9        100n      Capacitor_SMD:C_0805_2012Metric 60.0000    50.0000  -90.0000  bottom
+## End

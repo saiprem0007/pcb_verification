@@ -1,49 +1,186 @@
 {
-  "_note": "Package → expected_class + default bounding-box size (mm). Extend as needed.",
+  "_note": "Package -> expected_class + nominal footprint size in mm at design rotation 0 (w_mm x h_mm). Converted to reference pixels through the design transform, so boxes scale with the image. A size column in the placement file overrides it. KiCad 'Library:Footprint_suffix' names are normalised to these keys.",
   "_reviewed": false,
   "_scope": "Synthetic PCB demo + common EDA footprints. Real designs will need real packages added.",
-
-  "R_0402":  {"expected_class": "resistor", "w_mm": 1.2, "h_mm": 0.7},
-  "R_0603":  {"expected_class": "resistor", "w_mm": 1.8, "h_mm": 1.0},
-  "R_0805":  {"expected_class": "resistor", "w_mm": 2.4, "h_mm": 1.4},
-  "R_1206":  {"expected_class": "resistor", "w_mm": 3.6, "h_mm": 2.0},
-  "R_2512":  {"expected_class": "resistor", "w_mm": 6.5, "h_mm": 3.5},
-
-  "C_0402":  {"expected_class": "cap", "w_mm": 1.2, "h_mm": 0.7},
-  "C_0603":  {"expected_class": "cap", "w_mm": 1.8, "h_mm": 1.0},
-  "C_0805":  {"expected_class": "cap", "w_mm": 2.4, "h_mm": 1.4},
-  "C_1206":  {"expected_class": "cap", "w_mm": 3.6, "h_mm": 2.0},
-  "C_ELEC_5": {"expected_class": "cap", "w_mm": 5.0, "h_mm": 5.0},
-
-  "SOIC-8":  {"expected_class": "ic", "w_mm": 5.3, "h_mm": 4.1},
-  "SOIC-14": {"expected_class": "ic", "w_mm": 8.7, "h_mm": 4.1},
-  "SOIC-16": {"expected_class": "ic", "w_mm": 10.3, "h_mm": 4.1},
-  "QFP-32":  {"expected_class": "ic", "w_mm": 9.0,  "h_mm": 9.0},
-  "QFP-44":  {"expected_class": "ic", "w_mm": 12.0, "h_mm": 12.0},
-  "QFP-64":  {"expected_class": "ic", "w_mm": 14.0, "h_mm": 14.0},
-  "QFP-100": {"expected_class": "ic", "w_mm": 16.0, "h_mm": 16.0},
-  "DIP-8":   {"expected_class": "ic", "w_mm": 10.0, "h_mm": 8.0},
-  "DIP-14":  {"expected_class": "ic", "w_mm": 19.0, "h_mm": 8.0},
-  "DIP-16":  {"expected_class": "ic", "w_mm": 19.0, "h_mm": 8.0},
-
-  "LED_D5":  {"expected_class": "led", "w_mm": 5.0, "h_mm": 5.0},
-  "LED_0805":{"expected_class": "led", "w_mm": 2.2, "h_mm": 1.4},
-
-  "PinHeader_1x02": {"expected_class": "connector", "w_mm": 5.0, "h_mm": 2.5},
-  "PinHeader_1x04": {"expected_class": "connector", "w_mm": 10.0, "h_mm": 2.5},
-  "PinHeader_1x06": {"expected_class": "connector", "w_mm": 15.0, "h_mm": 2.5},
-  "PinHeader_2x03": {"expected_class": "connector", "w_mm": 7.5,  "h_mm": 5.0},
-  "USB_A":          {"expected_class": "connector", "w_mm": 14.0, "h_mm": 7.0},
-  "USB_Micro":      {"expected_class": "connector", "w_mm": 8.0,  "h_mm": 5.6},
-
-  "_SYNTHETIC_PCB_DEMO": {
-    "_note": "Synthetic PCB uses pixel-space bboxes converted to mm. Sizes below are the exact pixel extents * mm_per_px=0.12",
-    "IC_SYNTH_150x110": {"expected_class": "ic",        "w_mm": 18.0, "h_mm": 13.2},
-    "IC_SYNTH_120x90":  {"expected_class": "ic",        "w_mm": 14.4, "h_mm": 10.8},
-    "R_SYNTH_70x26":    {"expected_class": "resistor",  "w_mm": 8.4,  "h_mm": 3.12},
-    "R_SYNTH_26x70":    {"expected_class": "resistor",  "w_mm": 3.12, "h_mm": 8.4},
-    "C_SYNTH_46x46":    {"expected_class": "cap",       "w_mm": 5.52, "h_mm": 5.52},
-    "LED_SYNTH_40x40":  {"expected_class": "led",       "w_mm": 4.8,  "h_mm": 4.8},
-    "J_SYNTH_160x80":   {"expected_class": "connector", "w_mm": 19.2, "h_mm": 9.6}
+  "R_0402": {
+    "expected_class": "resistor",
+    "w_mm": 1.2,
+    "h_mm": 0.7
+  },
+  "R_0603": {
+    "expected_class": "resistor",
+    "w_mm": 1.8,
+    "h_mm": 1.0
+  },
+  "R_0805": {
+    "expected_class": "resistor",
+    "w_mm": 2.4,
+    "h_mm": 1.4
+  },
+  "R_1206": {
+    "expected_class": "resistor",
+    "w_mm": 3.6,
+    "h_mm": 2.0
+  },
+  "R_2512": {
+    "expected_class": "resistor",
+    "w_mm": 6.5,
+    "h_mm": 3.5
+  },
+  "C_0402": {
+    "expected_class": "cap",
+    "w_mm": 1.2,
+    "h_mm": 0.7
+  },
+  "C_0603": {
+    "expected_class": "cap",
+    "w_mm": 1.8,
+    "h_mm": 1.0
+  },
+  "C_0805": {
+    "expected_class": "cap",
+    "w_mm": 2.4,
+    "h_mm": 1.4
+  },
+  "C_1206": {
+    "expected_class": "cap",
+    "w_mm": 3.6,
+    "h_mm": 2.0
+  },
+  "C_ELEC_5": {
+    "expected_class": "cap",
+    "w_mm": 5.0,
+    "h_mm": 5.0
+  },
+  "SOIC-8": {
+    "expected_class": "ic",
+    "w_mm": 5.3,
+    "h_mm": 4.1
+  },
+  "SOIC-14": {
+    "expected_class": "ic",
+    "w_mm": 8.7,
+    "h_mm": 4.1
+  },
+  "SOIC-16": {
+    "expected_class": "ic",
+    "w_mm": 10.3,
+    "h_mm": 4.1
+  },
+  "QFP-32": {
+    "expected_class": "ic",
+    "w_mm": 9.0,
+    "h_mm": 9.0
+  },
+  "QFP-44": {
+    "expected_class": "ic",
+    "w_mm": 12.0,
+    "h_mm": 12.0
+  },
+  "QFP-64": {
+    "expected_class": "ic",
+    "w_mm": 14.0,
+    "h_mm": 14.0
+  },
+  "QFP-100": {
+    "expected_class": "ic",
+    "w_mm": 16.0,
+    "h_mm": 16.0
+  },
+  "DIP-8": {
+    "expected_class": "ic",
+    "w_mm": 10.0,
+    "h_mm": 8.0
+  },
+  "DIP-14": {
+    "expected_class": "ic",
+    "w_mm": 19.0,
+    "h_mm": 8.0
+  },
+  "DIP-16": {
+    "expected_class": "ic",
+    "w_mm": 19.0,
+    "h_mm": 8.0
+  },
+  "LED_D5": {
+    "expected_class": "led",
+    "w_mm": 5.0,
+    "h_mm": 5.0
+  },
+  "LED_0805": {
+    "expected_class": "led",
+    "w_mm": 2.2,
+    "h_mm": 1.4
+  },
+  "PinHeader_1x02": {
+    "expected_class": "connector",
+    "w_mm": 5.0,
+    "h_mm": 2.5
+  },
+  "PinHeader_1x04": {
+    "expected_class": "connector",
+    "w_mm": 10.0,
+    "h_mm": 2.5
+  },
+  "PinHeader_1x06": {
+    "expected_class": "connector",
+    "w_mm": 15.0,
+    "h_mm": 2.5
+  },
+  "PinHeader_2x03": {
+    "expected_class": "connector",
+    "w_mm": 7.5,
+    "h_mm": 5.0
+  },
+  "USB_A": {
+    "expected_class": "connector",
+    "w_mm": 14.0,
+    "h_mm": 7.0
+  },
+  "USB_Micro": {
+    "expected_class": "connector",
+    "w_mm": 8.0,
+    "h_mm": 5.6
+  },
+  "LED_D3": {
+    "expected_class": "led",
+    "w_mm": 3.0,
+    "h_mm": 3.0
+  },
+  "_SYNTHETIC_SECTION": "Entries below (*_SYNTH_*) are SYNTHETIC test-board footprints: Synthetic PCB uses pixel-space bboxes converted to mm. Sizes below are the exact pixel extents * mm_per_px=0.12",
+  "IC_SYNTH_150x110": {
+    "expected_class": "ic",
+    "w_mm": 18.0,
+    "h_mm": 13.2
+  },
+  "IC_SYNTH_120x90": {
+    "expected_class": "ic",
+    "w_mm": 14.4,
+    "h_mm": 10.8
+  },
+  "R_SYNTH_70x26": {
+    "expected_class": "resistor",
+    "w_mm": 8.4,
+    "h_mm": 3.12
+  },
+  "R_SYNTH_26x70": {
+    "expected_class": "resistor",
+    "w_mm": 3.12,
+    "h_mm": 8.4
+  },
+  "C_SYNTH_46x46": {
+    "expected_class": "cap",
+    "w_mm": 5.52,
+    "h_mm": 5.52
+  },
+  "LED_SYNTH_40x40": {
+    "expected_class": "led",
+    "w_mm": 4.8,
+    "h_mm": 4.8
+  },
+  "J_SYNTH_160x80": {
+    "expected_class": "connector",
+    "w_mm": 19.2,
+    "h_mm": 9.6
   }
 }

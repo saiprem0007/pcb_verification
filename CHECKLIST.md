@@ -131,3 +131,5 @@
 - [x] `scripts/check_model.py` — verify a downloaded YOLO `.pt`, print classes,
       suggest `AOI_YOLO_CLASS_ALIASES`, run a test inference
 - [x] Tests: multi-view combine + storage — 42 passing total
+
+- [x] Phase 4B housekeeping: suite is 264 passing, 0 skipped (see git log on phase-4b for later counts).

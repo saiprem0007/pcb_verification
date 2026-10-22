@@ -82,7 +82,7 @@ class TestKiCadParser:
         """SYNTHETIC — parse the generated .pos file."""
         path = FIXTURE_DIR / "synthetic_pcb.pos"
         if not path.is_file():
-            pytest.skip("Run tests/make_fixtures.py first")
+            pytest.fail("fixture missing: run tests/make_fixtures.py")
         comps = parse_placement_file(path)
         # 4 fiducials + 11 COMPONENTS
         assert len(comps) == 15, f"Expected 15, got {len(comps)}"
@@ -94,7 +94,7 @@ class TestKiCadParser:
     def test_all_on_side_f(self):
         path = FIXTURE_DIR / "synthetic_pcb.pos"
         if not path.is_file():
-            pytest.skip("Run tests/make_fixtures.py first")
+            pytest.fail("fixture missing: run tests/make_fixtures.py")
         comps = parse_placement_file(path)
         assert all(c.side == "F" for c in comps)
 
@@ -158,7 +158,7 @@ class TestCSVParser:
         """SYNTHETIC — parse the generated CSV file."""
         path = FIXTURE_DIR / "synthetic_pcb.csv"
         if not path.is_file():
-            pytest.skip("Run tests/make_fixtures.py first")
+            pytest.fail("fixture missing: run tests/make_fixtures.py")
         comps = parse_placement_file(path)
         assert len(comps) == 15
 
@@ -245,7 +245,7 @@ class TestFiducialTransform:
         """
         path = FIXTURE_DIR / "synthetic_pcb_fiducials.json"
         if not path.is_file():
-            pytest.skip("Run tests/make_fixtures.py first")
+            pytest.fail("fixture missing: run tests/make_fixtures.py")
         fids = _fiducials_from_json(path)
         t = compute_transform(fids)
         assert t.rms_error_px < 0.01, (
@@ -321,7 +321,7 @@ class TestRegionGeneration:
     def transform(self):
         path = FIXTURE_DIR / "synthetic_pcb_fiducials.json"
         if not path.is_file():
-            pytest.skip("Run tests/make_fixtures.py first")
+            pytest.fail("fixture missing: run tests/make_fixtures.py")
         fids = _fiducials_from_json(path)
         return compute_transform(fids)
 
@@ -329,7 +329,7 @@ class TestRegionGeneration:
     def generated_regions(self, transform):
         path = FIXTURE_DIR / "synthetic_pcb.pos"
         if not path.is_file():
-            pytest.skip("Run tests/make_fixtures.py first")
+            pytest.fail("fixture missing: run tests/make_fixtures.py")
         comps = parse_placement_file(path)
         non_fid = [c for c in comps if not c.is_fiducial()]
         # Use empty package table → all fallback (tests the fallback path)
@@ -494,7 +494,7 @@ class TestImportPlacementApi:
         pos_path = FIXTURE_DIR / "synthetic_pcb.pos"
         fid_path = FIXTURE_DIR / "synthetic_pcb_fiducials.json"
         if not pos_path.is_file() or not fid_path.is_file():
-            pytest.skip("Run tests/make_fixtures.py first")
+            pytest.fail("fixture missing: run tests/make_fixtures.py")
 
         fid_data = json.loads(fid_path.read_text("utf-8"))["fiducials"]
         fiducials_json = json.dumps([

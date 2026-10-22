@@ -133,3 +133,6 @@ CLI: `python scripts/probe_camera.py --list` then `python -m app.demo --camera <
 Mount the phone on a gooseneck/tripod pointing straight down at a taped board
 outline; even 45° lighting, no overhead glare. USB tether for the live demo, keep
 upload as the fallback if venue Wi-Fi is unreliable.
+
+
+Note: the test suite generates the SYNTHETIC `synthetic_v1` dataset itself (session fixture), so no pre-generation is required. `python scripts/make_synthetic_pcb.py` is only needed to inspect images by hand.

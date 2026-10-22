@@ -35,8 +35,8 @@ import _bootstrap  # noqa: F401
 from app.config import get_settings
 from app.design.parser import parse_placement_file, PlacementParseError
 from app.design.mapping import (
-    Fiducial, compute_transform, components_to_regions, TransformError,
-    _load_package_table,
+    Fiducial, compute_transform, components_to_regions, regions_from_dicts,
+    TransformError, _load_package_table,
 )
 from app.schemas.reference import Region, RegionTolerances
 from app.storage.reference_repository import ReferenceRepository, ReferenceError
@@ -179,21 +179,13 @@ def main() -> None:
     print_residual_report(transform, len(raw_regions), fallback_pkgs)
 
     # 6. Convert to Region objects
-    new_regions = [
-        Region(
-            name=r["name"],
-            bbox=r["bbox"],
-            expected_class=r["expected_class"],
-            tolerances=RegionTolerances(
-                check_rotation=r["tolerances"].get("check_rotation", True)
-            ),
-        )
-        for r in raw_regions
-    ]
+    new_regions = regions_from_dicts(raw_regions)
 
     print(f"regions generated : {len(new_regions)}")
+    src = {d["name"]: d["_size_source"] for d in raw_regions}
     for r in new_regions:
-        print(f"  {r.name:<8} bbox={r.bbox}  class={r.expected_class}")
+        print(f"  {r.name:<8} bbox={r.bbox}  class={r.expected_class}"
+              f"  size={src[r.name]}  rot={r.expected_rotation_deg}")
 
     if args.dry_run:
         print("\n[dry-run] no changes written to the reference.")
