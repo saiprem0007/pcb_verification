@@ -1,0 +1,12 @@
+{
+ "good_01": "6e2e950dcfacc8981cb590279b59d7e52047c1409b6ef33b930e93a9418a92bc",
+ "good_02": "db0a9c8c7bd373b53a5af9ec2b266bde20e49a35ae1e726382a02e62844cdaaa",
+ "good_03": "00224f0f6f9a77d10f251306767fbf13ac6945f730d664dfaf6c916abcca19a9",
+ "defect_missing_R17": "25e1b67e0f6443e22f36fddd6d8bbcafb54ba22300ec54f5c252395370534cde",
+ "defect_missing_C4": "2a0501a6729a113112d78c178d7a307d8fb5589d75cf314d36258e994875848c",
+ "defect_shifted_C4": "966d4ddc50e10a0166b04e8d1724cd0365f442bce63eaa420ee0c6ccca8de700",
+ "defect_rotated_IC2": "8dadbba18d8d89dbe2bea302a7852aa6db362f012bfc2f483b8197d4f3d337bf",
+ "defect_multi": "1ed5026dc87706554ff8e15fc1c683a28b8fcbbd000ab0046da44b93de1cd41b",
+ "review_blurred": "0d399fef9e02693215add5c32679d242f191658bc85073fb482ea94aebf9a436",
+ "review_off_fixture": "cc265f4c198ba185c0164bbb538cb62aaa08f954efff5bbfa57de21d716f38e5"
+}

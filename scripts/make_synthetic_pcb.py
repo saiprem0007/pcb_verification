@@ -44,7 +44,7 @@ COMPONENTS: list[tuple[str, tuple[int, int, int, int], str]] = [
 
 
 def _draw_component(img: np.ndarray, box: tuple[int, int, int, int], kind: str,
-                    name: str, angle: float = 0.0) -> None:
+                    name: str, angle: float = 0.0, polarity: bool = False) -> None:
     x, y, w, h = box
     layer = np.zeros_like(img)
     if kind == "ic":
@@ -70,6 +70,8 @@ def _draw_component(img: np.ndarray, box: tuple[int, int, int, int], kind: str,
     elif kind == "led":
         cv2.circle(layer, (x + w // 2, y + h // 2), w // 2, (60, 60, 210), -1)
         cv2.circle(layer, (x + w // 2, y + h // 2), w // 2, (180, 180, 220), 1)
+        if polarity:  # Phase 4B (synthetic_p4 only): cathode bar makes the glyph asymmetric
+            cv2.line(layer, (x + 4, y + 8), (x + 4, y + h - 8), (240, 240, 240), 3)
     elif kind == "connector":
         cv2.rectangle(layer, (x, y), (x + w, y + h), (20, 20, 20), -1)
         for i in range(6):
@@ -87,7 +89,21 @@ def _draw_component(img: np.ndarray, box: tuple[int, int, int, int], kind: str,
 
 
 def render_board(skip: set[str] | None = None, shift: dict[str, tuple[int, int]] | None = None,
-                 rotate: dict[str, float] | None = None, seed: int = 0) -> np.ndarray:
+                 rotate: dict[str, float] | None = None, seed: int = 0, *,
+                 extra: list[tuple[str, tuple[int, int, int, int], str]] | None = None,
+                 replace: dict[str, str] | None = None,
+                 size_scale: dict[str, float] | None = None,
+                 polarity: bool = False) -> np.ndarray:
+    """Render a flat board.  The keyword-only args are Phase 4B additions used by
+    synthetic_p4; with their defaults the output is byte-identical to before.
+
+    extra       parts drawn where the design has none (unexpected component)
+    replace     {ref: kind} draw a DIFFERENT kind of part inside that part's box
+    size_scale  {ref: factor} scale the part's body about its centre
+    polarity    draw the LED with a cathode bar (asymmetric glyph)
+    """
+    replace = replace or {}
+    size_scale = size_scale or {}
     rng = random.Random(seed)
     skip = skip or set()
     shift = shift or {}
@@ -109,7 +125,15 @@ def render_board(skip: set[str] | None = None, shift: dict[str, tuple[int, int]]
             continue
         x, y, w, h = box
         dx, dy = shift.get(name, (0, 0))
-        _draw_component(img, (x + dx, y + dy, w, h), kind, name, rotate.get(name, 0.0))
+        k = size_scale.get(name)
+        if k:
+            nw, nh = int(round(w * k)), int(round(h * k))
+            x, y = x + (w - nw) // 2, y + (h - nh) // 2
+            w, h = nw, nh
+        _draw_component(img, (x + dx, y + dy, w, h), replace.get(name, kind), name,
+                        rotate.get(name, 0.0), polarity=polarity)
+    for ename, ebox, ekind in (extra or []):
+        _draw_component(img, ebox, ekind, "", 0.0)
 
     # Soft lighting vignette (mimics an LED ring / dome light on the fixture).
     yy, xx = np.mgrid[0:H, 0:W]
