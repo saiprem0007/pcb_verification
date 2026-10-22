@@ -22,7 +22,7 @@ Uncertainty is never promoted to GOOD.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from ..config import Settings
 from ..schemas.defect import VERDICT_BLOCKING, Defect, DefectType
@@ -32,6 +32,7 @@ from ..schemas.inspection import (
     QualityReport,
     ReasonCode,
     RegionMeasurement,
+    ReviewReason,
 )
 
 
@@ -41,6 +42,7 @@ class Decision:
     reason: ReasonCode
     explanation: str
     overall_confidence: float
+    review_reasons: list[ReviewReason] = field(default_factory=list)
 
 
 def _type_name(d: Defect) -> str:
@@ -87,7 +89,38 @@ def _confidence(
     return round(max(0.0, min(1.0, sum(parts) / len(parts))), 3)
 
 
-def decide(
+def _with_reasons(dec: Decision, defects: list[Defect], measurements) -> Decision:
+    """Attach one ReviewReason per cause to every REVIEW decision."""
+    if dec.status != InspectionStatus.REVIEW:
+        return dec
+    if dec.reason == ReasonCode.SUSPECTED_DEFECT:
+        for d in defects:
+            ambiguous = "orientation_ambiguous" in (getattr(d, "signals", None) or [])
+            dec.review_reasons.append(ReviewReason(
+                code=ReasonCode.AMBIGUOUS_ORIENTATION if ambiguous else ReasonCode.SUSPECTED_DEFECT,
+                component=d.component,
+                detail=f"{_type_name(d)} (suspected)",
+            ))
+    elif dec.reason == ReasonCode.CONTRADICTORY and defects:
+        for d in defects:
+            dec.review_reasons.append(ReviewReason(
+                code=ReasonCode.CONTRADICTORY, component=d.component,
+                detail=f"{_type_name(d)} contradicted by the object detector"))
+    if not dec.review_reasons:
+        dec.review_reasons.append(ReviewReason(code=dec.reason, detail=dec.explanation))
+    return dec
+
+
+def decide(*args, **kwargs) -> Decision:
+    """Public entry: ``_decide`` plus per-cause review reasons."""
+    dec = _decide(*args, **kwargs)
+    # positional layout: alignment, quality, measurements, defects, cfg, board_similarity
+    defects = kwargs.get("defects", args[3] if len(args) > 3 else [])
+    measurements = kwargs.get("measurements", args[2] if len(args) > 2 else [])
+    return _with_reasons(dec, defects, measurements)
+
+
+def _decide(
     alignment: AlignmentMetadata,
     quality: QualityReport,
     measurements: list[RegionMeasurement],

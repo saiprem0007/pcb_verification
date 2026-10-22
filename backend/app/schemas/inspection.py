@@ -33,6 +33,16 @@ class ReasonCode(str, Enum):
     # A defect exists but is only suspected (heuristic / review-only type): a human
     # must look. Never GOOD, never DEFECTIVE on its own.
     SUSPECTED_DEFECT = "SUSPECTED_DEFECT"
+    # Orientation / polarity could not be decided (symmetric part or both angles close).
+    AMBIGUOUS_ORIENTATION = "AMBIGUOUS_ORIENTATION"
+
+
+class ReviewReason(BaseModel):
+    """One cause of a REVIEW verdict (every REVIEW carries at least one)."""
+
+    code: ReasonCode
+    component: str | None = None
+    detail: str = ""
 
 
 class QualityReport(BaseModel):
@@ -102,6 +112,8 @@ class InspectionResult(BaseModel):
     explanation: str = ""
     overall_confidence: float = Field(ge=0.0, le=1.0)
     inspection_time_ms: int
+    review_reasons: list[ReviewReason] = Field(default_factory=list)
+    """One entry per cause when status is REVIEW (empty for GOOD / DEFECTIVE)."""
 
     quality: QualityReport
     detection: BoardDetection = Field(default_factory=lambda: BoardDetection(found=False))

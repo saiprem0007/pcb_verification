@@ -29,6 +29,7 @@ from ..schemas.inspection import (
     ModelStatus,
     QualityReport,
     ReasonCode,
+    ReviewReason,
 )
 from ..schemas.reference import InspectionMode
 from . import (
@@ -92,6 +93,8 @@ def run_inspection(
     def finish(**kw) -> InspectionResult:
         kw.setdefault("inspection_time_ms", int((time.perf_counter() - t0) * 1000))
         result = InspectionResult(**{**partial, **kw})
+        if result.status == InspectionStatus.REVIEW and not result.review_reasons:
+            result.review_reasons = [ReviewReason(code=result.reason, detail=result.explanation)]
         (out_dir / "result.json").write_text(result.model_dump_json(indent=2), "utf-8")
         log.info(
             "%s -> %s (%s) conf=%.2f %dms defects=%d",
@@ -179,6 +182,9 @@ def run_inspection(
     # Decision status (GOOD/DEFECTIVE/REVIEW) is determined AFTER this call by
     # decide(), which uses the same defect list — severity does NOT influence it.
     defects = apply_severity(defects, cfg.severity_policy_path)
+    for d in defects:  # stage on every defect (Phase 4B)
+        if d.stage_id is None:
+            d.stage_id = profile.reference.stage_id
 
     # ---- Stage G: decision -----------------------------------------------
     decision = decision_engine.decide(
@@ -202,6 +208,7 @@ def run_inspection(
         reason=decision.reason,
         explanation=decision.explanation,
         overall_confidence=decision.overall_confidence,
+        review_reasons=decision.review_reasons,
         quality=quality,
         detection=det,
         alignment=align_meta,

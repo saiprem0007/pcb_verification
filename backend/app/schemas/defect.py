@@ -73,6 +73,23 @@ class Defect(BaseModel):
     # Axis-aligned box in aligned-image pixel coords: [x1, y1, x2, y2]
     bbox: tuple[int, int, int, int] | None = None
 
+    # Phase 4B additions (all optional; None/empty for pre-4B producers) -----
+    certainty: Literal["confirmed", "suspected"] | None = None
+    """``suspected`` = heuristic / single-signal; never DEFECTIVE on its own."""
+    signals: list[str] = Field(default_factory=list)
+    """Independent evidence behind the call, e.g. ``["template_corr", "orientation_ncc"]``."""
+    stage_id: str | None = None
+    """Assembly stage this defect belongs to (copied from the inspection)."""
+    expected_class: str | None = None
+    observed_class: str | None = None
+    """Observed class is None unless a detector supplied one (never guessed)."""
+    expected_rotation_deg: float | None = None
+    observed_rotation_deg: float | None = None
+    expected_size_px: tuple[float, float] | None = None
+    observed_size_px: tuple[float, float] | None = None
+    expected_position_mm: tuple[float, float] | None = None
+    observed_position_mm: tuple[float, float] | None = None
+
     # Severity and corrective action (populated by inspection/severity.py) ----
     # Both are optional: existing code constructing Defect without them works
     # unchanged. severity.apply_severity() fills them after detection.

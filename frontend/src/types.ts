@@ -33,6 +33,36 @@ export interface Defect {
   // Phase 1: severity annotation (populated by backend, always present after Phase 1)
   severity?: "CRITICAL" | "HIGH" | "MEDIUM" | "LOW" | null;
   corrective_action?: string;
+  // Phase 4B (all optional; absent for older results)
+  certainty?: "confirmed" | "suspected" | null;
+  signals?: string[];
+  stage_id?: string | null;
+  expected_class?: string | null;
+  observed_class?: string | null;
+  expected_rotation_deg?: number | null;
+  observed_rotation_deg?: number | null;
+  expected_size_px?: [number, number] | null;
+  observed_size_px?: [number, number] | null;
+  expected_position_mm?: [number, number] | null;
+  observed_position_mm?: [number, number] | null;
+}
+
+export type ReasonCode =
+  | "OK"
+  | "INVALID_IMAGE"
+  | "POOR_IMAGE_QUALITY"
+  | "ALIGNMENT_FAILED"
+  | "CRITICAL_DEFECT"
+  | "VISUAL_ANOMALY"
+  | "LOW_CONFIDENCE"
+  | "CONTRADICTORY"
+  | "SUSPECTED_DEFECT"
+  | "AMBIGUOUS_ORIENTATION";
+
+export interface ReviewReason {
+  code: ReasonCode;
+  component?: string | null;
+  detail: string;
 }
 
 export interface QualityReport {
@@ -142,12 +172,19 @@ export interface InspectionResult {
   stage_id?: string | null;
   stage_name?: string | null;
   unit_id?: string | null;
+  // Phase 4B
+  review_reasons?: ReviewReason[];
+  mm_scale_source?: "transform" | "scalar" | "config" | "none" | null;
+  mm_per_px?: number | null;
+  warnings?: string[];
 }
 
 export interface Region {
   name: string;
   bbox: [number, number, number, number];
   expected_class: string | null;
+  // Phase 4B: design rotation, CCW-positive as seen on the reference image
+  expected_rotation_deg?: number | null;
   tolerances: Record<string, unknown>;
 }
 
